@@ -2,3 +2,5 @@
 libtorch-shared-with-deps-latest.zip
 libtorch/
 build/
+t10k-*
+train-*
