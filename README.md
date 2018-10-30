@@ -21,3 +21,13 @@ make -j4
 
 
 https://github.com/goldsborough/examples/tree/cpp/cpp
+
+
+# libtorch
+
+include/
+	ATen/       : The foundational tensor and mathematical operation library
+	c10/        : Device type, meta programming, logging, flags, ...
+	caffe2/     : A New Lightweight, Modular, and Scalable Deep Learning Framework
+	torch/csrc/autograd: Augments ATen with automatic differentiation
+
