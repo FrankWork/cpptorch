@@ -1,6 +1,7 @@
 .vscode/
 libtorch-shared-with-deps-latest.zip
 libtorch/
+pytorch/
 build/
 t10k-*
 train-*
