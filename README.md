@@ -11,6 +11,7 @@ example-app/
   CMakeLists.txt
   example-app.cc
 
+cd example-app/
 mkdir build
 cd build
 cmake -DCMAKE_PREFIX_PATH=/full/path/to/libtorch .. 
