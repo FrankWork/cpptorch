@@ -3,6 +3,7 @@ libtorch-shared-with-deps-latest.zip
 libtorch/
 pytorch/
 jsoncpp-1.8.4/
+gflags-2.2.2/
 build/
 t10k-*
 train-*

@@ -17,8 +17,28 @@ cmake -DCMAKE_BUILD_TYPE=release \
 make
 make install 
 #-DCMAKE_INSTALL_INCLUDEDIR=include/jsoncpp
+
+
+#程序运行时的动态库加载路径
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${HOME}/local/lib64"
 ```
 
+gflags
+
+```bash
+wget https://github.com/gflags/gflags/archive/v2.2.2.tar.gz
+tar zxvf v2.2.2.tar.gz
+cd gflags-2.2.2
+mkdir build && cd build
+cmake -DBUILD_SHARED_LIBS=ON \
+	-DCMAKE_INSTALL_PREFIX=${HOME}/local \
+	..
+        
+make
+make install
+
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${HOME}/local/lib"
+```
 ## 编译
 
 ```bash
