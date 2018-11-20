@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <cmath>
+#include <cstdlib>
 #include <string>
 #include <json/json.h>
 #include <gflags/gflags.h>
@@ -37,6 +38,12 @@ struct BertConfig{
 	initializer_range(initializer_range)
 		{
 			
+		if (hidden_size % num_attention_heads != 0){
+			std::cerr<<"The hidden size " << hidden_size 
+				<<" is not a multiple of the number of attention heads "
+				<< num_attention_heads;
+			exit(0);
+		}
 	}
 
 	explicit BertConfig(const Json::Value& root){
@@ -140,6 +147,21 @@ struct BERTEmbeddings: nn::Module{
 	th::Tensor forward(th::Tensor input_ids, th::Tensor token_type_ids){
 		int64_t seq_length = input_ids.size(1);
 
+		th::Tensor position_ids = th::arange(seq_length, 
+				th::dtype(th::kInt64).device(input_ids.device()));
+		position_ids = position_ids.unsqueeze(0).expand_as(input_ids);
+		if(!token_type_ids.defined()){
+			token_type_ids = th::zeros_like(input_ids);
+		}
+
+		th::Tensor w_emb = word_embeddings->forward(input_ids);
+		th::Tensor p_emb = position_embeddings->forward(position_ids);
+		th::Tensor t_emb = token_type_embeddings->forward(token_type_ids);
+
+		th::Tensor emb = w_emb + p_emb + t_emb;
+		emb = LayerNorm.forward(emb);
+		emb = dropout->forward(emb);
+		return emb;
 	}
 
 	nn::Embedding word_embeddings;
@@ -151,6 +173,53 @@ struct BERTEmbeddings: nn::Module{
 	
 };
 
+struct BERTSelfAttention: nn::Module{
+	BERTSelfAttention(const BertConfig& cfg)
+		:num_attention_heads(cfg.num_attention_heads),
+		 attention_head_size(cfg.hidden_size / cfg.num_attention_heads),
+		 all_head_size(num_attention_heads * attention_head_size),
+		 query(cfg.hidden_size, all_head_size),
+		 value(cfg.hidden_size, all_head_size),
+		 key(cfg.hidden_size, all_head_size),
+		 dropout(cfg.attention_probs_dropout_prob){
+	}
+
+	th::Tensor transposeForScores(th::Tensor x){
+		// x size [a, b, c] => [a, b, nh, hs] => [a, nh, b, hs]
+		th::IntList size = x.sizes();
+		th::IntList newSize({size[0], size[1], num_attention_heads, attention_head_size});
+		x = x.view(newSize);
+		x = x.permute({0, 2, 1, 3});
+		return x;
+	}
+
+	th::Tensor forward(th::Tensor hiddenStates, th::Tensor attentionMask){
+		mixedQuery = query->forward(hiddenStates);
+		mixedKey = key->forward(hiddenStates);
+		mixedValue = value->forward(hiddenStates);
+
+		mixedQuery = transposeForScores(mixedQuery);
+		mixedKey = transposeForScores(mixedKey);
+		mixedValue = transposeForScores(mixedValue);
+
+		//Take the dot product between "query" and "key" to get the raw
+		//attention scores.
+		th::Tesnor scores = th::matmul(mixedQuery, mixedKey.transpose(3, 4));
+		scores = scores / std::sqrt(attention_head_size);
+		//Apply the attention mask is (precomputed for all layers in BertModel
+		//forward() function)
+		scores = scores + attentionMask;
+
+	}
+
+	int num_attention_heads;
+	int attention_head_size;
+	int all_head_size;
+	nn::Linear query;
+	nn::Linear key;
+	nn::Linear value;
+	nn::Dropout dropout;
+};
 struct Net: nn::Module{
 	Net(){
 	}
@@ -197,6 +266,12 @@ int main(int argc, char* argv[]){
 	std::cout << x.defined()<< " " << y.defined() << std::endl;
 	std::cout << y.size(0)<< " " << y.size(1) <<std::endl;
 	
-
+	x = th::rand({3,4,5});
+	th::IntList l = x.sizes();
+	std::cout << l << " "<< l.slice(0, l.size()-1)  << std::endl;
+	std::vector<int64_t> vec = l.slice(0, l.size()-1).vec();
+	vec.push_back(7);
+	vec.push_back(8);
+	std::cout << th::IntList(vec) << std::endl;
 	return 0;
 }
