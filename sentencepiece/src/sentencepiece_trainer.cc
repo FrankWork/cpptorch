@@ -41,6 +41,7 @@ util::Status SentencePieceTrainer::Train(
     const TrainerSpec &trainer_spec, const NormalizerSpec &normalizer_spec) {
   auto copied_normalizer_spec = normalizer_spec;
   RETURN_IF_ERROR(PopulateNormalizerSpec(&copied_normalizer_spec));
+  // trainer_factory.cc
   auto trainer = TrainerFactory::Create(trainer_spec, copied_normalizer_spec);
   return trainer->Train();
 }

@@ -161,6 +161,7 @@ int main(int argc, char *argv[]) {
   trainer_spec.set_model_type(sentencepiece::port::FindOrDie(
       kModelTypeMap, sentencepiece::string_util::ToLower(FLAGS_model_type)));
 
+  // sentencepiece_trainer.cc -> trainer_factory.cc -> bpe_model_trainer.cc
   CHECK_OK(sentencepiece::SentencePieceTrainer::Train(trainer_spec,
                                                       normalizer_spec));
 

@@ -27,6 +27,7 @@ std::unique_ptr<TrainerInterface> TrainerFactory::Create(
     const TrainerSpec &trainer_spec, const NormalizerSpec &normalizer_spec) {
   switch (trainer_spec.model_type()) {
     case TrainerSpec::UNIGRAM:
+		// utils.h port
       return port::MakeUnique<unigram::Trainer>(trainer_spec, normalizer_spec);
       break;
     case TrainerSpec::BPE:
