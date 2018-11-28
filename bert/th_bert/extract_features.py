@@ -32,31 +32,37 @@ from modeling import BertConfig, BertModel
 from logger import logger
 from atec_data import AtecProcessor, convert_examples_to_siamese_features, \
         convert_siamese_features_to_dataset
-
+from tqdm import tqdm
 
 def to_device(tokens, types, mask, device):
     return tokens.to(device), types.to(device), mask.to(device)
 
 def bert_feature(output_file, model, dataloader, device):
     features = []
-
-    for batch in dataloader:
+    
+    logger.info('Total {} batches.'.format(len(dataloader)))
+    for batch in tqdm(dataloader):
         unique_id, tokens_a, types_a, mask_a, \
             tokens_b, types_b, mask_b, label_ids = batch
 
-        _, out_a = model(tokens_a.to(device), token_type_ids=None, 
-                attention_mask=mask_a.to(device))
-        out_a = out_a.cpu()
-        
-        _, out_b = model(tokens_b.to(device), token_type_ids=None,
-                attention_mask=mask_b.to(device))
-        out_b = out_b.cpu()
+        with torch.no_grad():
+            _, out_a = model(tokens_a.to(device), token_type_ids=None, 
+                    attention_mask=mask_a.to(device))
+            out_a = out_a.cpu()
+            torch.cuda.empty_cache()
+
+        with torch.no_grad():
+            _, out_b = model(tokens_b.to(device), token_type_ids=None,
+                    attention_mask=mask_b.to(device))
+            out_b = out_b.cpu()
+            torch.cuda.empty_cache()
 
         for b, id_ in enumerate(unique_id):
             id_ = int(id_.item())
             features.append( (id_, out_a[b], out_b[b], label_ids[b]))
             
-    with open(output_file, "w", encoding='utf-8') as f:
+    logger.info('write features to {}'.format(output_file))
+    with open(output_file, "wb") as f:
         pickle.dump(features, f, protocol=2)
 
 def main():
@@ -98,30 +104,39 @@ def main():
 
     bert_config = BertConfig.from_json_file(args.bert_config_file)
 
-    tokenizer = tokenization.FullTokenizer(
-        vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
+    cache_path = os.path.join(args.output_dir, 'tmp_data.pkl')
+    if not os.path.exists(cache_path):
+        tokenizer = tokenization.FullTokenizer(
+            vocab_file=args.vocab_file, do_lower_case=args.do_lower_case)
 
-    processor = AtecProcessor()
-    label_list = processor.get_labels()
+        processor = AtecProcessor()
+        label_list = processor.get_labels()
 
-    train_examples = processor.get_train_examples(args.data_dir)
-    train_features = convert_examples_to_siamese_features(
-        train_examples, label_list, args.max_seq_length, tokenizer)
-    logger.info("***** Dataset info *****")
-    logger.info("  Num examples = %d", len(train_examples))
-    logger.info("  Batch size = %d", args.batch_size) 
+        train_examples = processor.get_train_examples(args.data_dir)
+        train_features = convert_examples_to_siamese_features(
+            train_examples, label_list, args.max_seq_length, tokenizer)
+        logger.info("***** Dataset info *****")
+        logger.info("  Num examples = %d", len(train_examples))
+        logger.info("  Batch size = %d", args.batch_size) 
 
-    train_dataloader = convert_siamese_features_to_dataset(
-            train_features, args.batch_size)
-   
-    dev_examples = processor.get_dev_examples(args.data_dir)
-    dev_features = convert_examples_to_siamese_features(
-        dev_examples, label_list, args.max_seq_length, tokenizer)
-    logger.info("***** Dataset info *****")
-    logger.info("  Num examples = %d", len(dev_examples))
-    logger.info("  Batch size = %d", args.batch_size) 
-    dev_dataloader = convert_siamese_features_to_dataset(
-            dev_features, args.batch_size)
+        train_dataloader = convert_siamese_features_to_dataset(
+                train_features, args.batch_size)
+       
+        dev_examples = processor.get_dev_examples(args.data_dir)
+        dev_features = convert_examples_to_siamese_features(
+            dev_examples, label_list, args.max_seq_length, tokenizer)
+        logger.info("***** Dataset info *****")
+        logger.info("  Num examples = %d", len(dev_examples))
+        logger.info("  Batch size = %d", args.batch_size) 
+        dev_dataloader = convert_siamese_features_to_dataset(
+                dev_features, args.batch_size)
+
+        with open(cache_path, 'wb') as f:
+            pickle.dump([train_dataloader, dev_dataloader], f)
+    else:
+        logger.info("load data from cache file: {}".format(cache_path))
+        with open(cache_path, 'rb') as f:
+            train_dataloader, dev_dataloader = pickle.load(f)
    
 
     model = BertModel(bert_config)
@@ -132,10 +147,11 @@ def main():
 
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
-
+    
+    logger.info('extract train features.')
     bert_feature(os.path.join(args.output_dir, "train.feat"), model, train_dataloader, device)
+    logger.info('extract dev features.')
     bert_feature(os.path.join(args.output_dir, "dev.feat"), model, dev_dataloader, device)
-        
     
 if __name__ == "__main__":
     main()
