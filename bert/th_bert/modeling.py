@@ -418,6 +418,41 @@ class BertForSequenceClassification(nn.Module):
         else:
             return logits
 
+class BertSiameseModel(nn.Module):
+    def __init__(self, config, num_labels):
+        super(BertSiameseModel, self).__init__()
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size*4, num_labels)
+
+        def init_weights(module):
+            if isinstance(module, (nn.Linear, nn.Embedding)):
+                module.weight.data.normal_(mean=0.0,
+                        std=config.initializer_range)
+            elif isinstance(module, BERTLayerNorm):
+                module.beta.data.normal_(mean=0.0,
+                        std=config.initializer_range)
+                module.gamma.data.normal_(mean=0.0,
+                        std=config.initializer_range)
+            if isinstance(module, nn.Linear):
+                module.bias.data.zero_()
+        self.apply(init_weights)
+
+    def forward(self, tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, labels=None):
+        _, a = self.bert(tokens_a, types_a, mask_a)
+        _, b = self.bert(tokens_b, types_b, mask_b)
+        x = torch.cat([a, b, torch.abs(a-b), a*b], -1)
+
+        x = self.dropout(x)
+        logits = self.classifier(x)
+        
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits, labels)
+            return loss, logits
+        else:
+            return logits
+
 class BertForQuestionAnswering(nn.Module):
     """BERT model for Question Answering (span extraction).
     This module is composed of the BERT model with a linear layer on top of

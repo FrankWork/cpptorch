@@ -33,6 +33,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 import tokenization
 from modeling import BertConfig, BertForSequenceClassification
+from modeling import BertSiameseModel
 from optimization import BERTAdam
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
@@ -328,6 +329,78 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
     return features
 
 
+def convert_examples_to_siamese_features(examples, label_list, max_seq_length, tokenizer):
+    label_map = {}
+    for (i, label) in enumerate(label_list):
+        label_map[label] = i
+
+    features = []
+    for (ex_index, example) in enumerate(examples):
+        tokens_a = tokenizer.tokenize(example.text_a)
+        tokens_b = tokenizer.tokenize(example.text_b)
+
+        # Modifies `tokens_a` and `tokens_b` in place so that the total
+        # length is less than the specified length.
+        # Account for [CLS], [SEP]; [CLS], [SEP] with "- 4"
+        _truncate_seq_pair(tokens_a, tokens_b, max_seq_length - 4)
+
+        tokens_a = ["[CLS]"] + tokens_a + ["[SEP]"]
+        tokens_b = ["[CLS]"] + tokens_b + ["[SEP]"]
+        types_a = [0] * len(tokens_a)
+        types_b = [0] * len(tokens_b)
+        
+        ids_a = tokenizer.convert_tokens_to_ids(tokens_a)
+        ids_b = tokenizer.convert_tokens_to_ids(tokens_b)
+
+        # The mask has 1 for real tokens and 0 for padding tokens. Only real
+        # tokens are attended to.
+        mask_a = [1] * len(ids_a)
+        mask_b = [1] * len(ids_b)
+
+        # Zero-pad up to the sequence length.
+        while len(ids_a) < max_seq_length:
+            ids_a.append(0)
+            mask_a.append(0)
+            types_a.append(0)
+        while len(ids_b) < max_seq_length:
+            ids_b.append(0)
+            mask_b.append(0)
+            types_b.append(0)
+
+        assert len(ids_a) == max_seq_length
+        assert len(ids_b) == max_seq_length
+
+        label_id = label_map[example.label]
+        if ex_index < 5:
+            logger.info("*** Example ***")
+            logger.info("guid: %s" % (example.guid))
+            logger.info("tokens_a: %s" % " ".join(
+                    [tokenization.printable_text(x) for x in tokens_a]))
+            logger.info("tokens_b: %s" % " ".join(
+                    [tokenization.printable_text(x) for x in tokens_b]))
+            logger.info("label: %s (id = %d)" % (example.label, label_id))
+
+        features.append(
+                InputSiameseFeatures(
+                    ids_a, types_a, mask_a,
+                    ids_b, types_b, mask_b,
+                    label_id))
+    return features
+
+
+class InputSiameseFeatures(object):
+    """A single set of features of data."""
+
+    def __init__(self, tokens_a, types_a, mask_a,
+                       tokens_b, types_b, mask_b, label_id):
+        self.tokens_a = tokens_a
+        self.types_a  = types_a
+        self.mask_a = mask_a
+        self.tokens_b = tokens_b
+        self.types_b  = types_b
+        self.mask_b = mask_b
+        self.label_id = label_id
+        
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
     """Truncates a sequence pair in place to the maximum length."""
 
@@ -555,7 +628,7 @@ def main():
     #if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
     #    raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if not os.path.exists(args.output_dir):
-	os.makedirs(args.output_dir) #, exist_ok=True)
+        os.makedirs(args.output_dir) #, exist_ok=True)
 
 
     task_name = args.task_name.lower()
@@ -581,7 +654,9 @@ def main():
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
     # Prepare model
-    model = BertForSequenceClassification(bert_config, len(label_list))
+    logger.info('build model')
+    #model = BertForSequenceClassification(bert_config, len(label_list))
+    model = BertSiameseModel(bert_config, len(label_list))
     if args.init_checkpoint is not None:
         try:
             # just model.bert
@@ -624,17 +699,29 @@ def main():
         from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
         from torch.utils.data.distributed import DistributedSampler
 
-        train_features = convert_examples_to_features(
+        # train_features = convert_examples_to_features(
+        #    train_examples, label_list, args.max_seq_length, tokenizer)
+        train_features = convert_examples_to_siamese_features(
             train_examples, label_list, args.max_seq_length, tokenizer)
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", num_train_steps)
-        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
+        # all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
+        # all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+        # all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
+        # all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
+        # train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        all_tokens_a = torch.tensor([f.tokens_a for f in train_features], dtype=torch.long)
+        all_types_a = torch.tensor([f.types_a for f in train_features], dtype=torch.long)
+        all_mask_a = torch.tensor([f.mask_a for f in train_features], dtype=torch.long)
+        all_tokens_b = torch.tensor([f.tokens_b for f in train_features], dtype=torch.long)
+        all_types_b = torch.tensor([f.types_b for f in train_features], dtype=torch.long)
+        all_mask_b = torch.tensor([f.mask_b for f in train_features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        train_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
+                all_tokens_b, all_types_b, all_mask_b, all_label_ids)
+
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_data)
         else:
@@ -647,8 +734,12 @@ def main():
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, input_mask, segment_ids, label_ids = batch
-                loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
+                # input_ids, input_mask, segment_ids, label_ids = batch
+                # loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
+                tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
+                loss, _ = model(tokens_a, types_a, mask_a, tokens_b, types_b,
+                        mask_b, label_ids)
+
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
                 if args.fp16 and args.loss_scale != 1.0:
@@ -659,7 +750,8 @@ def main():
                     loss = loss / args.gradient_accumulation_steps
                 loss.backward()
                 tr_loss += loss.item()
-                nb_tr_examples += input_ids.size(0)
+                #nb_tr_examples += input_ids.size(0)
+                nb_tr_examples += tokens_a.size(0)
                 nb_tr_steps += 1
                 if (step + 1) % args.gradient_accumulation_steps == 0:
                     if args.fp16 or args.optimize_on_cpu:
@@ -684,17 +776,33 @@ def main():
                                             "pytorch_model.bin"))
 
     if args.do_eval:
+        from tqdm import tqdm, trange
+        from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
+        from torch.utils.data.distributed import DistributedSampler
+
         eval_examples = processor.get_dev_examples(args.data_dir)
-        eval_features = convert_examples_to_features(
+        # eval_features = convert_examples_to_features(
+        #    eval_examples, label_list, args.max_seq_length, tokenizer)
+        eval_features = convert_examples_to_siamese_features(
             eval_examples, label_list, args.max_seq_length, tokenizer)
         logger.info("***** Running evaluation *****")
         logger.info("  Num examples = %d", len(eval_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
-        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        # all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        # all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        # all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        # all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+        # eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        all_tokens_a = torch.tensor([f.tokens_a for f in train_features], dtype=torch.long)
+        all_types_a = torch.tensor([f.types_a for f in train_features], dtype=torch.long)
+        all_mask_a = torch.tensor([f.mask_a for f in train_features], dtype=torch.long)
+        all_tokens_b = torch.tensor([f.tokens_b for f in train_features], dtype=torch.long)
+        all_types_b = torch.tensor([f.types_b for f in train_features], dtype=torch.long)
+        all_mask_b = torch.tensor([f.mask_b for f in train_features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
+        eval_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
+                all_tokens_b, all_types_b, all_mask_b, all_label_ids)
+
         if args.local_rank == -1:
             eval_sampler = SequentialSampler(eval_data)
         else:
@@ -706,14 +814,17 @@ def main():
         nb_eval_steps, nb_eval_examples = 0, 0
         y_true = []
         y_pred = []
-        for input_ids, input_mask, segment_ids, label_ids in eval_dataloader:
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
+        for batch in eval_dataloader:
+            tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
+            # input_ids = input_ids.to(device)
+            # input_mask = input_mask.to(device)
+            # segment_ids = segment_ids.to(device)
+            # label_ids = label_ids.to(device)
 
             with torch.no_grad():
-                tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
+                # tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
+                tmp_eval_loss, logits = model(tokens_a, types_a, mask_a,
+                        tokens_b, types_b, mask_b, label_ids)
 
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
@@ -727,7 +838,8 @@ def main():
             eval_loss += tmp_eval_loss.mean().item()
             eval_accuracy += tmp_eval_accuracy
 
-            nb_eval_examples += input_ids.size(0)
+            #nb_eval_examples += input_ids.size(0)
+            nb_eval_examples += tokens_a.size(0)
             nb_eval_steps += 1
 
         eval_loss = eval_loss / nb_eval_steps
@@ -743,8 +855,9 @@ def main():
             result['loss'] = tr_loss/nb_tr_steps
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
+        with open(output_eval_file, "a") as writer:
             logger.info("***** Eval results *****")
+            writer.write("***** Eval results *****")
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
@@ -765,7 +878,7 @@ def main():
         model.eval()
         y_pred = []
         batch_size = args.eval_batch_size
-	for i in range(0, len(all_input_ids), batch_size):
+        for i in range(0, len(all_input_ids), batch_size):
             input_ids = all_input_ids[i:i+batch_size]
             input_mask = all_input_mask[i:i+batch_size]
             segment_ids = all_segment_ids[i:i+batch_size]

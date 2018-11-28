@@ -9,3 +9,9 @@ build/
 t10k-*
 train-*
 tmp.*
+txt-books/
+files.txt
+files_meta.txt
+books.db
+baidu-lac-python/
+lac_vars_map.npz
