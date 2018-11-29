@@ -858,8 +858,8 @@ def main():
             mask_b = all_mask_b[i:i+batch_size]
 
             with torch.no_grad():
-                # _, logits = model(input_ids, segment_ids, input_mask, label_ids)
-                _, logits = model(tokens_a, types_a, mask_a,
+                # logits = model(input_ids, segment_ids, input_mask)
+                logits = model(tokens_a, types_a, mask_a,
                         tokens_b, types_b, mask_b)
 
             logits = logits.detach().cpu().numpy()

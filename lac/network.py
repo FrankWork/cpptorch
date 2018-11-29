@@ -41,12 +41,31 @@ def sequence_mask(lens: torch.Tensor, max_len: int = None) -> torch.ByteTensor:
 
     return mask
 
+
+def flip(x, dim):
+    indices = [slice(None)] * x.dim()
+    indices[dim] = torch.arange(x.size(dim) - 1, -1, -1,
+                                dtype=torch.long, device=x.device)
+    return x[tuple(indices)]
+
+
+def reverse_tensor(x):
+    ''' x = x[:, ::-1, :] in numpy
+
+	x = torch.arange(24).view(2,4,3)
+	print(x)
+	print(reverse_tensor(x))
+    '''
+    return flip(x, 1)
+    
+
 class Config(object):
     def __init__(self):
         self.word_dim = 128
         self.hidden_dim = 256
         self.num_gru_layers = 2
 	self.num_labels = 57
+
 
 class BiGruLayer(nn.Module):
     def __init__(self, args):
@@ -63,10 +82,12 @@ class BiGruLayer(nn.Module):
                 batch_first=True)
 
     def forward(self, x):
-        forward, _ = self.gru(self.fc(x))
-        x_backward = ?
-        backward, _ = self.gru_r(self.fc_r(x_backward))
-        return th.cat([forward, backward], dim=-1)
+        hidden, _ = self.gru(self.fc(x))
+
+        x_reverse = reverse_tensor(x)
+        hidden_r, _ = self.gru_r(self.fc_r(x_reverse))
+        
+	return th.cat([hidden, hidden_r], dim=-1)
 
 class LacNet(nn.Module):
     def __init__(self, args):
@@ -84,17 +105,17 @@ class LacNet(nn.Module):
         self.emission = nn.Linear(hidden_dim*2, num_labels)
         
         self.crf  = ConditionalRandomField(num_labels)
-        self.crf_decode = crf_decoding()
-        self.crf_cost = linear_chain_crf()
+        # self.crf_decode = crf_decoding()
+        # self.crf_cost = linear_chain_crf()
     
-    def forward(self, x):
+    def forward(self, x, lens=None):
         x = self.word_emb(x)
         for gru in self.gru_layers:
             x = gru(x)
         x = self.emission(x)
 
         if lens is None:
-            lens = torch.tensor([words.size(0)], device=words.device)
+            lens = torch.tensor([words.size(1)], device=words.device)
         mask = sequence_mask(lens)
 
         # Run features through Viterbi decode algorithm.

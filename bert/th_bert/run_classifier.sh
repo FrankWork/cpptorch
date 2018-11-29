@@ -15,7 +15,7 @@ python run_classifier.py \
   --vocab_file $BERT_BASE_DIR/vocab.txt \
   --bert_config_file $BERT_BASE_DIR/bert_config.json \
   --init_checkpoint $BERT_BASE_DIR/pytorch_model.bin \
-  --max_seq_length 169 \
+  --max_seq_length 70 \
   --train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
