@@ -26,15 +26,18 @@ import argparse
 import random
 
 import numpy as np
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score, \
+        accuracy_score
 
 import torch
+import torch as th
 from torch.utils.data import TensorDataset, DataLoader
 
 import tokenization
 from modeling import BertConfig, BertForSequenceClassification
 from modeling import BertSiameseModel
 from optimization import BERTAdam
+import collections
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
                     datefmt = '%m/%d/%Y %H:%M:%S',
@@ -453,129 +456,65 @@ def main():
     parser = argparse.ArgumentParser()
 
     ## Required parameters
-    parser.add_argument("--data_dir",
-                        default=None,
-                        type=str,
-                        required=True,
+    parser.add_argument("--data_dir", default=None, type=str, required=True,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
-    parser.add_argument("--bert_config_file",
-                        default=None,
-                        type=str,
-                        required=True,
+    parser.add_argument("--bert_config_file", default=None,  type=str,   required=True,
                         help="The config json file corresponding to the pre-trained BERT model. \n"
                              "This specifies the model architecture.")
-    parser.add_argument("--task_name",
-                        default=None,
-                        type=str,
-                        required=True,
+    parser.add_argument("--task_name", default=None,  type=str,   required=True,
                         help="The name of the task to train.")
-    parser.add_argument("--vocab_file",
-                        default=None,
-                        type=str,
-                        required=True,
+    parser.add_argument("--vocab_file", default=None,  type=str,   required=True,
                         help="The vocabulary file that the BERT model was trained on.")
-    parser.add_argument("--output_dir",
-                        default=None,
-                        type=str,
-                        required=True,
+    parser.add_argument("--output_dir", default=None,  type=str,   required=True,
                         help="The output directory where the model checkpoints will be written.")
 
     ## Other parameters
-    parser.add_argument("--init_checkpoint",
-                        default=None,
-                        type=str,
-                        help="Initial checkpoint (usually from a pre-trained BERT model).")
-    parser.add_argument("--do_lower_case",
-                        default=False,
-                        action='store_true',
-                        help="Whether to lower case the input text. True for uncased models, False for cased models.")
-    parser.add_argument("--max_seq_length",
-                        default=128,
-                        type=int,
-                        help="The maximum total input sequence length after WordPiece tokenization. \n"
+    parser.add_argument("--init_checkpoint", default=None,  type=str,   
+                                help="Initial checkpoint (usually from a pre-trained BERT model).")
+    parser.add_argument("--do_lower_case", default=False,  action='store_true',
+                                help="Whether to lower case the input text. True for uncased models, False for cased models.")
+    parser.add_argument("--max_seq_length", default=128,   type=int,
+                                help="The maximum total input sequence length after WordPiece tokenization. \n"
                              "Sequences longer than this will be truncated, and sequences shorter \n"
                              "than this will be padded.")
-    parser.add_argument("--do_train",
-                        default=False,
-                        action='store_true',
-                        help="Whether to run training.")
-    parser.add_argument("--do_eval",
-                        default=False,
-                        action='store_true',
-                        help="Whether to run eval on the dev set.")
-    parser.add_argument("--train_batch_size",
-                        default=32,
-                        type=int,
-                        help="Total batch size for training.")
-    parser.add_argument("--eval_batch_size",
-                        default=8,
-                        type=int,
-                        help="Total batch size for eval.")
-    parser.add_argument("--learning_rate",
-                        default=5e-5,
-                        type=float,
-                        help="The initial learning rate for Adam.")
-    parser.add_argument("--num_train_epochs",
-                        default=3.0,
-                        type=float,
-                        help="Total number of training epochs to perform.")
-    parser.add_argument("--warmup_proportion",
-                        default=0.1,
-                        type=float,
-                        help="Proportion of training to perform linear learning rate warmup for. "
+    parser.add_argument("--do_train", default=False,   action='store_true',
+                                help="Whether to run training.")
+    parser.add_argument("--do_eval", default=False,   action='store_true',
+                                help="Whether to run eval on the dev set.")
+    parser.add_argument("--train_batch_size", default=32,   type=int,
+                                help="Total batch size for training.")
+    parser.add_argument("--eval_batch_size", default=8,   type=int,
+                                help="Total batch size for eval.")
+    parser.add_argument("--learning_rate", default=5e-5,   type=float,
+                                help="The initial learning rate for Adam.")
+    parser.add_argument("--num_train_epochs", default=3.0,   type=float,
+                                help="Total number of training epochs to perform.")
+    parser.add_argument("--warmup_proportion", default=0.1,   type=float,
+                                help="Proportion of training to perform linear learning rate warmup for. "
                              "E.g., 0.1 = 10%% of training.")
-    parser.add_argument("--save_checkpoints_steps",
-                        default=1000,
-                        type=int,
-                        help="How often to save the model checkpoint.")
-    parser.add_argument("--no_cuda",
-                        default=False,
-                        action='store_true',
-                        help="Whether not to use CUDA when available")
-    parser.add_argument("--local_rank",
-                        type=int,
-                        default=-1,
-                        help="local_rank for distributed training on gpus")
-    parser.add_argument("--gpu_id",
-                        type=int,
-                        default=0,
-                        help="select one gpu to use")
-    parser.add_argument('--seed', 
-                        type=int, 
-                        default=42,
-                        help="random seed for initialization")
-    parser.add_argument('--gradient_accumulation_steps',
-                        type=int,
-                        default=1,
-                        help="Number of updates steps to accumualte before performing a backward/update pass.")                       
-    parser.add_argument('--optimize_on_cpu',
-                        default=False,
-                        action='store_true',
-                        help="Whether to perform optimization and keep the optimizer averages on CPU")
-    parser.add_argument('--fp16',
-                        default=False,
-                        action='store_true',
-                        help="Whether to use 16-bit float precision instead of 32-bit")
-    parser.add_argument('--loss_scale',
-                        type=float, default=128,
-                        help='Loss scaling, positive power of 2 values can improve fp16 convergence.')
+    parser.add_argument("--save_checkpoints_steps", default=1000,   type=int,
+                                help="How often to save the model checkpoint.")
+    parser.add_argument("--no_cuda", default=False,   action='store_true',
+                                help="Whether not to use CUDA when available")
+    parser.add_argument("--local_rank", type=int, default=-1,
+                            help="local_rank for distributed training on gpus")
+    parser.add_argument("--gpu_ids", type=str, default="0",
+                            help="select one gpu to use")
+    parser.add_argument('--seed',  type=int,  default=42,
+                            help="random seed for initialization")
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                            help="Number of updates steps to accumualte before performing a backward/update pass.")                       
+    parser.add_argument('--optimize_on_cpu', default=False,action='store_true',
+                            help="Whether to perform optimization and keep the optimizer averages on CPU")
+    parser.add_argument('--fp16', default=False, action='store_true',
+                            help="Whether to use 16-bit float precision instead of 32-bit")
+    parser.add_argument('--loss_scale', type=float, default=128,
+                            help='Loss scaling, positive power of 2 values can improve fp16 convergence.')
     ################## atec 
-    parser.add_argument('--do_submit',
-                        default=False,
-                        action='store_true',
-                        help="submit to results to atec cloud")
-    parser.add_argument('--train_devset',
-                        default=False,
-                        action='store_true',
-                        help="")
-    parser.add_argument("--test_in_file",
-                        default=None,
-                        type=str,
-                        help="")
-    parser.add_argument("--test_out_file",
-                        default=None,
-                        type=str,
-                        help="")
+    parser.add_argument('--do_submit', default=False, action='store_true',  help="submit to results to atec cloud")
+    parser.add_argument('--train_devset', default=False, action='store_true',  help="")
+    parser.add_argument("--test_in_file", default=None, type=str,  help="")
+    parser.add_argument("--test_out_file", default=None, type=str,  help="")
 
     args = parser.parse_args()
 
@@ -587,9 +526,10 @@ def main():
     }
 
     if args.local_rank == -1 and not args.no_cuda:
-        # device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        device = torch.device("cuda", args.gpu_id)
-        n_gpu = 1 # torch.cuda.device_count()
+        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+       
+        #device = torch.device("cuda", args.gpu_id)
+        n_gpu = len(args.gpu_ids.split(','))#torch.cuda.device_count()
     elif args.no_cuda:
         device = torch.device('cpu')
         n_gpu = 0
@@ -663,7 +603,13 @@ def main():
             model.bert.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
         except RuntimeError as e:
             # all model
-            model.load_state_dict(torch.load(args.init_checkpoint, map_location='cpu'))
+            import re
+            new_state_dict = collections.OrderedDict()
+            state_dict = torch.load(args.init_checkpoint, map_location='cpu')
+            for key in state_dict.keys():
+                new_key = re.sub("module\.", "", key)
+                new_state_dict[new_key] = state_dict[key]
+            model.load_state_dict(new_state_dict)
     if args.fp16:
         model.half()
     model.to(device)
@@ -671,7 +617,8 @@ def main():
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank)
     elif n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        model = torch.nn.DataParallel(model, device_ids=[int(x) for x in
+            args.gpu_ids.split(',')])
 
     # Prepare optimizer
     if args.fp16:
@@ -732,45 +679,52 @@ def main():
         for _ in trange(int(args.num_train_epochs), desc="Epoch"):
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
-                batch = tuple(t.to(device) for t in batch)
-                # input_ids, input_mask, segment_ids, label_ids = batch
-                # loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
-                tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
-                loss, _ = model(tokens_a, types_a, mask_a, tokens_b, types_b,
-                        mask_b, label_ids)
+            with tqdm(train_dataloader, desc="Iteration") as pbar:
+                for step, batch in enumerate(pbar):
+                    batch = tuple(t.to(device) for t in batch)
+                    # input_ids, input_mask, segment_ids, label_ids = batch
+                    # loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
+                    tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
+                    loss, logits = model(tokens_a, types_a, mask_a, tokens_b, types_b,
+                            mask_b, label_ids)
 
-                if n_gpu > 1:
-                    loss = loss.mean() # mean() to average on multi-gpu.
-                if args.fp16 and args.loss_scale != 1.0:
-                    # rescale loss for fp16 training
-                    # see https://docs.nvidia.com/deeplearning/sdk/mixed-precision-training/index.html
-                    loss = loss * args.loss_scale
-                if args.gradient_accumulation_steps > 1:
-                    loss = loss / args.gradient_accumulation_steps
-                loss.backward()
-                tr_loss += loss.item()
-                #nb_tr_examples += input_ids.size(0)
-                nb_tr_examples += tokens_a.size(0)
-                nb_tr_steps += 1
-                if (step + 1) % args.gradient_accumulation_steps == 0:
-                    if args.fp16 or args.optimize_on_cpu:
-                        if args.fp16 and args.loss_scale != 1.0:
-                            # scale down gradients for fp16 training
-                            for param in model.parameters():
-                                param.grad.data = param.grad.data / args.loss_scale
-                        is_nan = set_optimizer_params_grad(param_optimizer, model.named_parameters(), test_nan=True)
-                        if is_nan:
-                            logger.info("FP16 TRAINING: Nan in gradients, reducing loss scaling")
-                            args.loss_scale = args.loss_scale / 2
-                            model.zero_grad()
-                            continue
-                        optimizer.step()
-                        copy_optimizer_params_to_model(model.named_parameters(), param_optimizer)
-                    else:
-                        optimizer.step()
-                    model.zero_grad()
-                    global_step += 1
+                    if n_gpu > 1:
+                        loss = loss.mean() # mean() to average on multi-gpu.
+                    if args.fp16 and args.loss_scale != 1.0:
+                        # rescale loss for fp16 training
+                        # see https://docs.nvidia.com/deeplearning/sdk/mixed-precision-training/index.html
+                        loss = loss * args.loss_scale
+                    if args.gradient_accumulation_steps > 1:
+                        loss = loss / args.gradient_accumulation_steps
+                    loss.backward()
+                    tr_loss += loss.item()
+                    
+                    preds = th.argmax(logits, dim=1)
+                    acc = accuracy_score(label_ids.detach().cpu().numpy(),
+                                preds.detach().cpu().numpy())
+
+                    pbar.set_postfix(loss=loss.item(), acc=acc.item())
+                    #nb_tr_examples += input_ids.size(0)
+                    nb_tr_examples += tokens_a.size(0)
+                    nb_tr_steps += 1
+                    if (step + 1) % args.gradient_accumulation_steps == 0:
+                        if args.fp16 or args.optimize_on_cpu:
+                            if args.fp16 and args.loss_scale != 1.0:
+                                # scale down gradients for fp16 training
+                                for param in model.parameters():
+                                    param.grad.data = param.grad.data / args.loss_scale
+                            is_nan = set_optimizer_params_grad(param_optimizer, model.named_parameters(), test_nan=True)
+                            if is_nan:
+                                logger.info("FP16 TRAINING: Nan in gradients, reducing loss scaling")
+                                args.loss_scale = args.loss_scale / 2
+                                model.zero_grad()
+                                continue
+                            optimizer.step()
+                            copy_optimizer_params_to_model(model.named_parameters(), param_optimizer)
+                        else:
+                            optimizer.step()
+                        model.zero_grad()
+                        global_step += 1
 
         torch.save(model.state_dict(), os.path.join(args.output_dir,
                                             "pytorch_model.bin"))
@@ -793,13 +747,13 @@ def main():
         # all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
         # all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
         # eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        all_tokens_a = torch.tensor([f.tokens_a for f in train_features], dtype=torch.long)
-        all_types_a = torch.tensor([f.types_a for f in train_features], dtype=torch.long)
-        all_mask_a = torch.tensor([f.mask_a for f in train_features], dtype=torch.long)
-        all_tokens_b = torch.tensor([f.tokens_b for f in train_features], dtype=torch.long)
-        all_types_b = torch.tensor([f.types_b for f in train_features], dtype=torch.long)
-        all_mask_b = torch.tensor([f.mask_b for f in train_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
+        all_tokens_a = torch.tensor([f.tokens_a for f in eval_features], dtype=torch.long)
+        all_types_a = torch.tensor([f.types_a for f in eval_features], dtype=torch.long)
+        all_mask_a = torch.tensor([f.mask_a for f in eval_features], dtype=torch.long)
+        all_tokens_b = torch.tensor([f.tokens_b for f in eval_features], dtype=torch.long)
+        all_types_b = torch.tensor([f.types_b for f in eval_features], dtype=torch.long)
+        all_mask_b = torch.tensor([f.mask_b for f in eval_features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
         eval_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
                 all_tokens_b, all_types_b, all_mask_b, all_label_ids)
 
@@ -814,7 +768,7 @@ def main():
         nb_eval_steps, nb_eval_examples = 0, 0
         y_true = []
         y_pred = []
-        for batch in eval_dataloader:
+        for batch in tqdm(eval_dataloader):
             tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
             # input_ids = input_ids.to(device)
             # input_mask = input_mask.to(device)
@@ -864,33 +818,49 @@ def main():
 
     if args.do_submit:
         eval_examples = processor.get_test_examples(args.test_in_file)
-        eval_features = convert_examples_to_features(
+        # eval_features = convert_examples_to_features(
+        #    eval_examples, label_list, args.max_seq_length, tokenizer)
+        eval_features = convert_examples_to_siamese_features(
             eval_examples, label_list, args.max_seq_length, tokenizer)
-        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+        # all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        # all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        # all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        # all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
         #eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         
+        all_tokens_a = torch.tensor([f.tokens_a for f in eval_features], dtype=torch.long)
+        all_types_a = torch.tensor([f.types_a for f in eval_features], dtype=torch.long)
+        all_mask_a = torch.tensor([f.mask_a for f in eval_features], dtype=torch.long)
+        all_tokens_b = torch.tensor([f.tokens_b for f in eval_features], dtype=torch.long)
+        all_types_b = torch.tensor([f.types_b for f in eval_features], dtype=torch.long)
+        all_mask_b = torch.tensor([f.mask_b for f in eval_features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+        # eval_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
+        #        all_tokens_b, all_types_b, all_mask_b, all_label_ids)
+
+
         #eval_sampler = SequentialSampler(eval_data)
         #eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         model.eval()
         y_pred = []
         batch_size = args.eval_batch_size
-        for i in range(0, len(all_input_ids), batch_size):
-            input_ids = all_input_ids[i:i+batch_size]
-            input_mask = all_input_mask[i:i+batch_size]
-            segment_ids = all_segment_ids[i:i+batch_size]
-            label_ids = all_label_ids[i:i+batch_size]
-        #for input_ids, input_mask, segment_ids, label_ids in eval_dataloader:
-            input_ids = input_ids.to(device)
-            input_mask = input_mask.to(device)
-            segment_ids = segment_ids.to(device)
-            label_ids = label_ids.to(device)
+        for i in range(0, len(all_label_ids), batch_size):
+            # input_ids = all_input_ids[i:i+batch_size]
+            # input_mask = all_input_mask[i:i+batch_size]
+            # segment_ids = all_segment_ids[i:i+batch_size]
+            # label_ids = all_label_ids[i:i+batch_size]
+            tokens_a = all_tokens_a[i:i+batch_size]
+            types_a = all_types_a[i:i+batch_size]
+            mask_a = all_mask_a[i:i+batch_size]
+            tokens_b = all_tokens_b[i:i+batch_size]
+            types_b = all_types_b[i:i+batch_size]
+            mask_b = all_mask_b[i:i+batch_size]
 
             with torch.no_grad():
-                _, logits = model(input_ids, segment_ids, input_mask, label_ids)
+                # _, logits = model(input_ids, segment_ids, input_mask, label_ids)
+                _, logits = model(tokens_a, types_a, mask_a,
+                        tokens_b, types_b, mask_b)
 
             logits = logits.detach().cpu().numpy()
             preds = np.argmax(logits, axis=1)

@@ -7,6 +7,7 @@ export BERT_BASE_DIR=${DIR}/atec_submit/chinese_L-12_H-768_A-12_atec
 python run_classifier.py \
   --task_name atec \
   --gpu_id 0 \
+  --optimize_on_cpu \
   --do_eval \
   --train_devset \
   --do_lower_case \
