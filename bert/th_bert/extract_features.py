@@ -38,7 +38,10 @@ def to_device(tokens, types, mask, device):
     return tokens.to(device), types.to(device), mask.to(device)
 
 def bert_feature(output_file, model, dataloader, device):
-    features = []
+    ids = []
+    feat_a = []
+    feat_b = []
+    labels = []
     
     logger.info('Total {} batches.'.format(len(dataloader)))
     for batch in tqdm(dataloader):
@@ -58,12 +61,14 @@ def bert_feature(output_file, model, dataloader, device):
             torch.cuda.empty_cache()
 
         for b, id_ in enumerate(unique_id):
-            id_ = int(id_.item())
-            features.append( (id_, out_a[b], out_b[b], label_ids[b]))
+            ids.append( int(id_.item()) )
+            feat_a.append( out_a[b].numpy() )
+            feat_b.append( out_b[b].numpy() )
+            labels.append( label_ids[b].item() )
             
     logger.info('write features to {}'.format(output_file))
-    with open(output_file, "wb") as f:
-        pickle.dump(features, f, protocol=2)
+    np.savez(output_file, ids=ids, feat_a=feat_a, feat_b=feat_b, labels=labels)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -149,9 +154,9 @@ def main():
         os.makedirs(args.output_dir)
     
     logger.info('extract train features.')
-    bert_feature(os.path.join(args.output_dir, "train.feat"), model, train_dataloader, device)
+    bert_feature(os.path.join(args.output_dir, "train.npz"), model, train_dataloader, device)
     logger.info('extract dev features.')
-    bert_feature(os.path.join(args.output_dir, "dev.feat"), model, dev_dataloader, device)
+    bert_feature(os.path.join(args.output_dir, "dev.npz"), model, dev_dataloader, device)
     
 if __name__ == "__main__":
     main()
