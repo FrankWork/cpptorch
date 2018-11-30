@@ -16,3 +16,4 @@ books.db
 baidu-lac-python/
 lac_vars_map.npz
 __pycache__/
+conf/
