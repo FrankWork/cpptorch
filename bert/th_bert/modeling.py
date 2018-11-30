@@ -392,7 +392,7 @@ class BertForSequenceClassification(nn.Module):
         super(BertForSequenceClassification, self).__init__()
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, num_labels)
+        self.classifier = nn.Linear(config.hidden_size*3, num_labels)
 
         def init_weights(module):
             if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -408,7 +408,13 @@ class BertForSequenceClassification(nn.Module):
 
     def forward(self, input_ids, token_type_ids, attention_mask, labels=None):
         _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
+        # encoder_layers, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
+        # seq_out = encoder_layers[-1]
+        # mean_pool = seq_out.mean(dim=1)
+        # max_pool, max_idx  = seq_out.max(dim=1)
+
         pooled_output = self.dropout(pooled_output)
+        #        torch.cat([mean_pool, max_pool, pooled_output], dim=-1))
         logits = self.classifier(pooled_output)
 
         if labels is not None:

@@ -52,9 +52,9 @@ def flip(x, dim):
 def reverse_tensor(x):
     ''' x = x[:, ::-1, :] in numpy
 
-	x = torch.arange(24).view(2,4,3)
-	print(x)
-	print(reverse_tensor(x))
+        x = torch.arange(24).view(2,4,3)
+        print(x)
+        print(reverse_tensor(x))
     '''
     return flip(x, 1)
     
@@ -64,7 +64,14 @@ class Config(object):
         self.word_dim = 128
         self.hidden_dim = 256
         self.num_gru_layers = 2
-	self.num_labels = 57
+        self.num_labels = 57
+        self.vocab_size = 20941
+
+class Gru(nn.Module):
+    def __init__(self, args):
+        hidden_dim = args.hidden_dim
+        self.weight = torch.tensor([hidden_dim, hidden_dim*3])
+        self.bias = torch.tensor([1, hidden_dim*3])
 
 
 class BiGruLayer(nn.Module):
@@ -87,7 +94,7 @@ class BiGruLayer(nn.Module):
         x_reverse = reverse_tensor(x)
         hidden_r, _ = self.gru_r(self.fc_r(x_reverse))
         
-	return th.cat([hidden, hidden_r], dim=-1)
+        return th.cat([hidden, hidden_r], dim=-1)
 
 class LacNet(nn.Module):
     def __init__(self, args):
@@ -97,11 +104,11 @@ class LacNet(nn.Module):
         word_dim = args.word_dim
         num_gru_layers = args.num_gru_layers
         num_labels = args.num_labels
-	hidden_dim = args.hidden_dim
+        hidden_dim = args.hidden_dim
 
         self.word_emb = nn.Embedding(vocab_size, word_dim)
         self.gru_layers = nn.ModuleList([
-                BiGruLayer(args) for _ in num_gru_layers])
+                BiGruLayer(args) for _ in range(num_gru_layers)])
         self.emission = nn.Linear(hidden_dim*2, num_labels)
         
         self.crf  = ConditionalRandomField(num_labels)

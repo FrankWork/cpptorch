@@ -102,38 +102,6 @@ class DataProcessor(object):
             return lines
 
 
-class MrpcProcessor(DataProcessor):
-    """Processor for the MRPC data set (GLUE version)."""
-
-    def get_train_examples(self, data_dir):
-        """See base class."""
-        logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-    def get_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
-
-    def get_labels(self):
-        """See base class."""
-        return ["0", "1"]
-
-    def _create_examples(self, lines, set_type):
-        """Creates examples for the training and dev sets."""
-        examples = []
-        for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
-            guid = "%s-%s" % (set_type, i)
-            text_a = tokenization.convert_to_unicode(line[3])
-            text_b = tokenization.convert_to_unicode(line[4])
-            label = tokenization.convert_to_unicode(line[0])
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-        return examples
-
 class AtecProcessor(DataProcessor):
     """Processor for the ATEC nlp sim task"""
     def get_train_examples(self, data_dir):
@@ -172,68 +140,6 @@ class AtecProcessor(DataProcessor):
             examples.append(
                     InputExample(guid, text_a, text_b, label))
         return examples
-
-class MnliProcessor(DataProcessor):
-    """Processor for the MultiNLI data set (GLUE version)."""
-
-    def get_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-    def get_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev_matched.tsv")),
-            "dev_matched")
-
-    def get_labels(self):
-        """See base class."""
-        return ["contradiction", "entailment", "neutral"]
-
-    def _create_examples(self, lines, set_type):
-        """Creates examples for the training and dev sets."""
-        examples = []
-        for (i, line) in enumerate(lines):
-            if i == 0:
-                continue
-            guid = "%s-%s" % (set_type, tokenization.convert_to_unicode(line[0]))
-            text_a = tokenization.convert_to_unicode(line[8])
-            text_b = tokenization.convert_to_unicode(line[9])
-            label = tokenization.convert_to_unicode(line[-1])
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
-        return examples
-        
-
-class ColaProcessor(DataProcessor):
-    """Processor for the CoLA data set (GLUE version)."""
-
-    def get_train_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
-
-    def get_dev_examples(self, data_dir):
-        """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
-
-    def get_labels(self):
-        """See base class."""
-        return ["0", "1"]
-
-    def _create_examples(self, lines, set_type):
-        """Creates examples for the training and dev sets."""
-        examples = []
-        for (i, line) in enumerate(lines):
-            guid = "%s-%s" % (set_type, i)
-            text_a = tokenization.convert_to_unicode(line[3])
-            label = tokenization.convert_to_unicode(line[1])
-            examples.append(
-                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
-        return examples
-
 
 def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer):
     """Loads a data file into a list of `InputBatch`s."""
@@ -461,8 +367,6 @@ def main():
     parser.add_argument("--bert_config_file", default=None,  type=str,   required=True,
                         help="The config json file corresponding to the pre-trained BERT model. \n"
                              "This specifies the model architecture.")
-    parser.add_argument("--task_name", default=None,  type=str,   required=True,
-                        help="The name of the task to train.")
     parser.add_argument("--vocab_file", default=None,  type=str,   required=True,
                         help="The vocabulary file that the BERT model was trained on.")
     parser.add_argument("--output_dir", default=None,  type=str,   required=True,
@@ -518,13 +422,6 @@ def main():
 
     args = parser.parse_args()
 
-    processors = {
-        "cola": ColaProcessor,
-        "mnli": MnliProcessor,
-        "mrpc": MrpcProcessor,
-        "atec": AtecProcessor,
-    }
-
     if args.local_rank == -1 and not args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
        
@@ -571,12 +468,7 @@ def main():
         os.makedirs(args.output_dir) #, exist_ok=True)
 
 
-    task_name = args.task_name.lower()
-
-    if task_name not in processors:
-        raise ValueError("Task not found: %s" % (task_name))
-
-    processor = processors[task_name]()
+    processor = AtecProcessor()
     label_list = processor.get_labels()
 
     tokenizer = tokenization.FullTokenizer(
@@ -595,8 +487,8 @@ def main():
 
     # Prepare model
     logger.info('build model')
-    #model = BertForSequenceClassification(bert_config, len(label_list))
-    model = BertSiameseModel(bert_config, len(label_list))
+    model = BertForSequenceClassification(bert_config, len(label_list))
+    #model = BertSiameseModel(bert_config, len(label_list))
     if args.init_checkpoint is not None:
         try:
             # just model.bert
@@ -620,54 +512,54 @@ def main():
         model = torch.nn.DataParallel(model, device_ids=[int(x) for x in
             args.gpu_ids.split(',')])
 
-    # Prepare optimizer
-    if args.fp16:
-        param_optimizer = [(n, param.clone().detach().to('cpu').float().requires_grad_()) \
-                            for n, param in model.named_parameters()]
-    elif args.optimize_on_cpu:
-        param_optimizer = [(n, param.clone().detach().to('cpu').requires_grad_()) \
-                            for n, param in model.named_parameters()]
-    else:
-        param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'gamma', 'beta']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if n not in no_decay], 'weight_decay_rate': 0.01},
-        {'params': [p for n, p in param_optimizer if n in no_decay], 'weight_decay_rate': 0.0}
-        ]
-    optimizer = BERTAdam(optimizer_grouped_parameters,
-                         lr=args.learning_rate,
-                         warmup=args.warmup_proportion,
-                         t_total=num_train_steps)
-
     global_step = 0
     tr_loss=None
     if args.do_train:
+        # Prepare optimizer
+        if args.fp16:
+            param_optimizer = [(n, param.clone().detach().to('cpu').float().requires_grad_()) \
+                                for n, param in model.named_parameters()]
+        elif args.optimize_on_cpu:
+            param_optimizer = [(n, param.clone().detach().to('cpu').requires_grad_()) \
+                                for n, param in model.named_parameters()]
+        else:
+            param_optimizer = list(model.named_parameters())
+        no_decay = ['bias', 'gamma', 'beta']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if n not in no_decay], 'weight_decay_rate': 0.01},
+            {'params': [p for n, p in param_optimizer if n in no_decay], 'weight_decay_rate': 0.0}
+            ]
+        optimizer = BERTAdam(optimizer_grouped_parameters,
+                             lr=args.learning_rate,
+                             warmup=args.warmup_proportion,
+                             t_total=num_train_steps)
+
         from tqdm import tqdm, trange
         from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
         from torch.utils.data.distributed import DistributedSampler
 
-        # train_features = convert_examples_to_features(
+        train_features = convert_examples_to_features(
+           train_examples, label_list, args.max_seq_length, tokenizer)
+        # train_features = convert_examples_to_siamese_features(
         #    train_examples, label_list, args.max_seq_length, tokenizer)
-        train_features = convert_examples_to_siamese_features(
-            train_examples, label_list, args.max_seq_length, tokenizer)
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
         logger.info("  Batch size = %d", args.train_batch_size)
         logger.info("  Num steps = %d", num_train_steps)
-        # all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
-        # all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
-        # all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
-        # all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
-        # train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        all_tokens_a = torch.tensor([f.tokens_a for f in train_features], dtype=torch.long)
-        all_types_a = torch.tensor([f.types_a for f in train_features], dtype=torch.long)
-        all_mask_a = torch.tensor([f.mask_a for f in train_features], dtype=torch.long)
-        all_tokens_b = torch.tensor([f.tokens_b for f in train_features], dtype=torch.long)
-        all_types_b = torch.tensor([f.types_b for f in train_features], dtype=torch.long)
-        all_mask_b = torch.tensor([f.mask_b for f in train_features], dtype=torch.long)
+        all_input_ids = torch.tensor([f.input_ids for f in train_features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in train_features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in train_features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
-        train_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
-                all_tokens_b, all_types_b, all_mask_b, all_label_ids)
+        train_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        # all_tokens_a = torch.tensor([f.tokens_a for f in train_features], dtype=torch.long)
+        # all_types_a = torch.tensor([f.types_a for f in train_features], dtype=torch.long)
+        # all_mask_a = torch.tensor([f.mask_a for f in train_features], dtype=torch.long)
+        # all_tokens_b = torch.tensor([f.tokens_b for f in train_features], dtype=torch.long)
+        # all_types_b = torch.tensor([f.types_b for f in train_features], dtype=torch.long)
+        # all_mask_b = torch.tensor([f.mask_b for f in train_features], dtype=torch.long)
+        # all_label_ids = torch.tensor([f.label_id for f in train_features], dtype=torch.long)
+        # train_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
+        #         all_tokens_b, all_types_b, all_mask_b, all_label_ids)
 
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_data)
@@ -682,11 +574,11 @@ def main():
             with tqdm(train_dataloader, desc="Iteration") as pbar:
                 for step, batch in enumerate(pbar):
                     batch = tuple(t.to(device) for t in batch)
-                    # input_ids, input_mask, segment_ids, label_ids = batch
-                    # loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
-                    tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
-                    loss, logits = model(tokens_a, types_a, mask_a, tokens_b, types_b,
-                            mask_b, label_ids)
+                    input_ids, input_mask, segment_ids, label_ids = batch
+                    loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
+                    # tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
+                    # loss, logits = model(tokens_a, types_a, mask_a, tokens_b, types_b,
+                    #         mask_b, label_ids)
 
                     if n_gpu > 1:
                         loss = loss.mean() # mean() to average on multi-gpu.
@@ -705,7 +597,7 @@ def main():
 
                     pbar.set_postfix(loss=loss.item(), acc=acc.item())
                     #nb_tr_examples += input_ids.size(0)
-                    nb_tr_examples += tokens_a.size(0)
+                    nb_tr_examples += label_ids.size(0)
                     nb_tr_steps += 1
                     if (step + 1) % args.gradient_accumulation_steps == 0:
                         if args.fp16 or args.optimize_on_cpu:
@@ -735,27 +627,27 @@ def main():
         from torch.utils.data.distributed import DistributedSampler
 
         eval_examples = processor.get_dev_examples(args.data_dir)
-        # eval_features = convert_examples_to_features(
+        eval_features = convert_examples_to_features(
+           eval_examples, label_list, args.max_seq_length, tokenizer)
+        # eval_features = convert_examples_to_siamese_features(
         #    eval_examples, label_list, args.max_seq_length, tokenizer)
-        eval_features = convert_examples_to_siamese_features(
-            eval_examples, label_list, args.max_seq_length, tokenizer)
         logger.info("***** Running evaluation *****")
         logger.info("  Num examples = %d", len(eval_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
-        # all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-        # all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-        # all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-        # all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
-        # eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        all_tokens_a = torch.tensor([f.tokens_a for f in eval_features], dtype=torch.long)
-        all_types_a = torch.tensor([f.types_a for f in eval_features], dtype=torch.long)
-        all_mask_a = torch.tensor([f.mask_a for f in eval_features], dtype=torch.long)
-        all_tokens_b = torch.tensor([f.tokens_b for f in eval_features], dtype=torch.long)
-        all_types_b = torch.tensor([f.types_b for f in eval_features], dtype=torch.long)
-        all_mask_b = torch.tensor([f.mask_b for f in eval_features], dtype=torch.long)
+        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
-        eval_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
-                all_tokens_b, all_types_b, all_mask_b, all_label_ids)
+        eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        # all_tokens_a = torch.tensor([f.tokens_a for f in eval_features], dtype=torch.long)
+        # all_types_a = torch.tensor([f.types_a for f in eval_features], dtype=torch.long)
+        # all_mask_a = torch.tensor([f.mask_a for f in eval_features], dtype=torch.long)
+        # all_tokens_b = torch.tensor([f.tokens_b for f in eval_features], dtype=torch.long)
+        # all_types_b = torch.tensor([f.types_b for f in eval_features], dtype=torch.long)
+        # all_mask_b = torch.tensor([f.mask_b for f in eval_features], dtype=torch.long)
+        # all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+        # eval_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
+        #         all_tokens_b, all_types_b, all_mask_b, all_label_ids)
 
         if args.local_rank == -1:
             eval_sampler = SequentialSampler(eval_data)
@@ -769,16 +661,17 @@ def main():
         y_true = []
         y_pred = []
         for batch in tqdm(eval_dataloader):
-            tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
-            # input_ids = input_ids.to(device)
-            # input_mask = input_mask.to(device)
-            # segment_ids = segment_ids.to(device)
-            # label_ids = label_ids.to(device)
+            # tokens_a, types_a, mask_a, tokens_b, types_b, mask_b, label_ids = batch
+            input_ids, input_mask, segment_ids, label_ids = batch
+            input_ids = input_ids.to(device)
+            input_mask = input_mask.to(device)
+            segment_ids = segment_ids.to(device)
+            label_ids = label_ids.to(device)
 
             with torch.no_grad():
-                # tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
-                tmp_eval_loss, logits = model(tokens_a, types_a, mask_a,
-                        tokens_b, types_b, mask_b, label_ids)
+                tmp_eval_loss, logits = model(input_ids, segment_ids, input_mask, label_ids)
+                # tmp_eval_loss, logits = model(tokens_a, types_a, mask_a,
+                #        tokens_b, types_b, mask_b, label_ids)
 
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
@@ -793,7 +686,7 @@ def main():
             eval_accuracy += tmp_eval_accuracy
 
             #nb_eval_examples += input_ids.size(0)
-            nb_eval_examples += tokens_a.size(0)
+            nb_eval_examples += label_ids.size # np.array
             nb_eval_steps += 1
 
         eval_loss = eval_loss / nb_eval_steps
@@ -818,23 +711,23 @@ def main():
 
     if args.do_submit:
         eval_examples = processor.get_test_examples(args.test_in_file)
-        # eval_features = convert_examples_to_features(
-        #    eval_examples, label_list, args.max_seq_length, tokenizer)
-        eval_features = convert_examples_to_siamese_features(
+        eval_features = convert_examples_to_features(
             eval_examples, label_list, args.max_seq_length, tokenizer)
-        # all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
-        # all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
-        # all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
-        # all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+        # eval_features = convert_examples_to_siamese_features(
+        #    eval_examples, label_list, args.max_seq_length, tokenizer)
+        all_input_ids = torch.tensor([f.input_ids for f in eval_features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in eval_features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in eval_features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
         #eval_data = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         
-        all_tokens_a = torch.tensor([f.tokens_a for f in eval_features], dtype=torch.long)
-        all_types_a = torch.tensor([f.types_a for f in eval_features], dtype=torch.long)
-        all_mask_a = torch.tensor([f.mask_a for f in eval_features], dtype=torch.long)
-        all_tokens_b = torch.tensor([f.tokens_b for f in eval_features], dtype=torch.long)
-        all_types_b = torch.tensor([f.types_b for f in eval_features], dtype=torch.long)
-        all_mask_b = torch.tensor([f.mask_b for f in eval_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
+        # all_tokens_a = torch.tensor([f.tokens_a for f in eval_features], dtype=torch.long)
+        # all_types_a = torch.tensor([f.types_a for f in eval_features], dtype=torch.long)
+        # all_mask_a = torch.tensor([f.mask_a for f in eval_features], dtype=torch.long)
+        # all_tokens_b = torch.tensor([f.tokens_b for f in eval_features], dtype=torch.long)
+        # all_types_b = torch.tensor([f.types_b for f in eval_features], dtype=torch.long)
+        # all_mask_b = torch.tensor([f.mask_b for f in eval_features], dtype=torch.long)
+        # all_label_ids = torch.tensor([f.label_id for f in eval_features], dtype=torch.long)
         # eval_data = TensorDataset(all_tokens_a, all_types_a, all_mask_a,
         #        all_tokens_b, all_types_b, all_mask_b, all_label_ids)
 
@@ -846,21 +739,22 @@ def main():
         y_pred = []
         batch_size = args.eval_batch_size
         for i in range(0, len(all_label_ids), batch_size):
-            # input_ids = all_input_ids[i:i+batch_size]
-            # input_mask = all_input_mask[i:i+batch_size]
-            # segment_ids = all_segment_ids[i:i+batch_size]
-            # label_ids = all_label_ids[i:i+batch_size]
-            tokens_a = all_tokens_a[i:i+batch_size]
-            types_a = all_types_a[i:i+batch_size]
-            mask_a = all_mask_a[i:i+batch_size]
-            tokens_b = all_tokens_b[i:i+batch_size]
-            types_b = all_types_b[i:i+batch_size]
-            mask_b = all_mask_b[i:i+batch_size]
+            input_ids = all_input_ids[i:i+batch_size]
+            input_mask = all_input_mask[i:i+batch_size]
+            segment_ids = all_segment_ids[i:i+batch_size]
+            label_ids = all_label_ids[i:i+batch_size]
+
+            # tokens_a = all_tokens_a[i:i+batch_size]
+            # types_a = all_types_a[i:i+batch_size]
+            # mask_a = all_mask_a[i:i+batch_size]
+            # tokens_b = all_tokens_b[i:i+batch_size]
+            # types_b = all_types_b[i:i+batch_size]
+            # mask_b = all_mask_b[i:i+batch_size]
 
             with torch.no_grad():
-                # logits = model(input_ids, segment_ids, input_mask)
-                logits = model(tokens_a, types_a, mask_a,
-                        tokens_b, types_b, mask_b)
+                logits = model(input_ids, segment_ids, input_mask)
+                # logits = model(tokens_a, types_a, mask_a,
+                #        tokens_b, types_b, mask_b)
 
             logits = logits.detach().cpu().numpy()
             preds = np.argmax(logits, axis=1)

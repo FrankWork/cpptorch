@@ -1,13 +1,11 @@
 
 export DIR=${HOME}/bert
 export DATA_DIR=${DIR}/atec_nlp
-#export BERT_BASE_DIR=${DIR}/chinese_L-12_H-768_A-12
-export BERT_BASE_DIR=${DIR}/atec_submit/chinese_L-12_H-768_A-12_atec
-#  --do_train \
+export BERT_BASE_DIR=${DIR}/chinese_L-12_H-768_A-12
+# export BERT_BASE_DIR=${DIR}/atec_submit/chinese_L-12_H-768_A-12_atec
 python run_classifier.py \
-  --task_name atec \
-  --gpu_id 0 \
-  --optimize_on_cpu \
+  --gpu_ids 0,1 \
+  --do_train \
   --do_eval \
   --train_devset \
   --do_lower_case \
@@ -15,7 +13,7 @@ python run_classifier.py \
   --vocab_file $BERT_BASE_DIR/vocab.txt \
   --bert_config_file $BERT_BASE_DIR/bert_config.json \
   --init_checkpoint $BERT_BASE_DIR/pytorch_model.bin \
-  --max_seq_length 70 \
+  --max_seq_length 100 \
   --train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \

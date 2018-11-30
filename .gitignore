@@ -15,3 +15,4 @@ files_meta.txt
 books.db
 baidu-lac-python/
 lac_vars_map.npz
+__pycache__/
