@@ -14,3 +14,17 @@ cd lac
 git lfs install
 git lfs pull
 ```
+
+
+## thulac
+
+
+```bash
+
+# 安装
+cd THULAC_lite_c++_v1
+make
+mv thulac train_c ~/local/bin
+thulac --help
+
+```

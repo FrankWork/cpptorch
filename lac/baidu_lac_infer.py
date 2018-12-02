@@ -5,6 +5,7 @@ import paddle.fluid as fluid
 import paddle
 import argparse
 import os
+from tqdm import tqdm
 
 def parse_args():
     parser = argparse.ArgumentParser("Run inference.")
@@ -15,6 +16,8 @@ def parse_args():
             '--model_dir', type=str,  default='conf', help='A path to the model dir')
     parser.add_argument(
             '--input_path', type=str,  default=None, help='dir or file')
+    parser.add_argument(
+            '--output_file', type=str,  default=None, help='file')
     args = parser.parse_args()
     return args
 
@@ -137,47 +140,51 @@ def infer(args):
     place = fluid.CPUPlace()
     exe = fluid.Executor(place)
 
+   
+
     inference_scope = fluid.core.Scope()
     with fluid.scope_guard(inference_scope):
         [inference_program, feed_target_names,
          fetch_targets] = fluid.io.load_inference_model(paddle_model_path, exe)
-        for data in test_data():
-            full_out_str = ""
-            word_idx = to_lodtensor([x[0] for x in data], place)
-            word_list = [x[1] for x in data]
-            (crf_decode, ) = exe.run(inference_program,
-                                 feed={"word":word_idx},
-                                 fetch_list=fetch_targets,
-                                 return_numpy=False)
-            lod_info = (crf_decode.lod())[0]
-            np_data = np.array(crf_decode)
-            assert len(data) == len(lod_info) - 1
-            for sen_index in range(len(data)):
-                assert len(data[sen_index][0]) == lod_info[
-                    sen_index + 1] - lod_info[sen_index]
-                word_index = 0
-                outstr = ""
-                cur_full_word = ""
-                cur_full_tag = ""
-                words = word_list[sen_index]
-                for tag_index in range(lod_info[sen_index],
-                                        lod_info[sen_index + 1]):
-                    cur_word = words[word_index]
-                    cur_tag = id2label_dict[str(np_data[tag_index][0])]
-                    if cur_tag.endswith("-B") or cur_tag.endswith("O"):
-                        if len(cur_full_word) != 0:
-                            #outstr += cur_full_word.encode('utf8') + "/" + cur_full_tag.encode('utf8') + " "
-                            outstr += cur_full_word.encode('utf8') + " "
-                        cur_full_word = cur_word
-                        cur_full_tag = get_real_tag(cur_tag)
-                    else:
-                        cur_full_word += cur_word
-                    word_index += 1
-                # outstr += cur_full_word.encode('utf8') + "/" + cur_full_tag.encode('utf8') + " "    
-                outstr += cur_full_word.encode('utf8') + " "    
-                outstr = outstr.strip()
-                full_out_str += outstr + "\n"
-            print(full_out_str.strip())
+        with open(args.output_file, 'w') as writer:
+            for data in tqdm(test_data()):
+                full_out_str = ""
+                word_idx = to_lodtensor([x[0] for x in data], place)
+                word_list = [x[1] for x in data]
+                (crf_decode, ) = exe.run(inference_program,
+                                     feed={"word":word_idx},
+                                     fetch_list=fetch_targets,
+                                     return_numpy=False)
+                lod_info = (crf_decode.lod())[0]
+                np_data = np.array(crf_decode)
+                assert len(data) == len(lod_info) - 1
+                for sen_index in range(len(data)):
+                    assert len(data[sen_index][0]) == lod_info[
+                        sen_index + 1] - lod_info[sen_index]
+                    word_index = 0
+                    outstr = ""
+                    cur_full_word = ""
+                    cur_full_tag = ""
+                    words = word_list[sen_index]
+                    for tag_index in range(lod_info[sen_index],
+                                            lod_info[sen_index + 1]):
+                        cur_word = words[word_index]
+                        cur_tag = id2label_dict[str(np_data[tag_index][0])]
+                        if cur_tag.endswith("-B") or cur_tag.endswith("O"):
+                            if len(cur_full_word) != 0:
+                                #outstr += cur_full_word.encode('utf8') + "/" + cur_full_tag.encode('utf8') + " "
+                                outstr += cur_full_word.encode('utf8') + " "
+                            cur_full_word = cur_word
+                            cur_full_tag = get_real_tag(cur_tag)
+                        else:
+                            cur_full_word += cur_word
+                        word_index += 1
+                    # outstr += cur_full_word.encode('utf8') + "/" + cur_full_tag.encode('utf8') + " "    
+                    outstr += cur_full_word.encode('utf8') + " "    
+                    outstr = outstr.strip()
+                    full_out_str += outstr + "\n"
+                #print(full_out_str.strip())
+                writer.write(full_out_str.strip())
 
 if __name__ == "__main__":
     args = parse_args()
