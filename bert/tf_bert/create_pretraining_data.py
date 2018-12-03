@@ -220,7 +220,15 @@ def create_training_instances(input_files, tokenizer, max_seq_length,
 def create_instances_from_document(
     all_documents, document_index, max_seq_length, short_seq_prob,
     masked_lm_prob, max_predictions_per_seq, vocab_words, rng):
-  """Creates `TrainingInstance`s for a single document."""
+  """Creates `TrainingInstance`s for a single document.
+     Args:
+        document: a list of tokenized sentence, 
+         [
+            ['the', 'f', '##ou', '##nt'],
+            ...,
+            ['pro', '##du', '##ce', 'on', 'hi', '##m']
+         ]
+  """
   document = all_documents[document_index]
 
   # Account for [CLS], [SEP], [SEP]
@@ -246,8 +254,9 @@ def create_instances_from_document(
   current_chunk = []
   current_length = 0
   i = 0
+  
   while i < len(document):
-    segment = document[i]
+    segment = document[i] # segment is one sentence
     current_chunk.append(segment)
     current_length += len(segment)
     if i == len(document) - 1 or current_length >= target_seq_length:
