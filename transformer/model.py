@@ -99,6 +99,7 @@ class EncoderLayer(nn.Module):
 		super(EncoderLayer, self).__init__()
 		self.self_attn = self_attn
 		self.feed_forward = feed_forward
+                # self_attn + feed_forward
 		self.sublayer = clones(SublayerConnection(size, dropout),2)
 		self.size = size
 	
@@ -114,7 +115,8 @@ class Decoder(nn.Module):
 		self.layers = clones(layer, N)
 		self.layernorm = LayerNorm(layer.size)
 	
-	def forward(self, x, memory, src_mask, tgt_mask):
+	def forward(self, x, memory, src_mask, tgt_mask): 
+		# x is target, encoder result is memory
 		for layer in self.layers:
 			x = layer(x, memory, src_mask, tgt_mask)
 		return self.layernorm(x)
@@ -133,7 +135,7 @@ class DecoderLayer(nn.Module):
 		"Follow Figure 1 (right) for connections."
 		m=memory
 		x = self.sublayer[0](x, lambda x:self.self_attn(x,x,x,tgt_mask))
-		x = self.sublayer[1](x, lambda x:self.self_attn(x,m,m,src_mask))
+		x = self.sublayer[1](x, lambda x:self.src_attn(x,m,m,src_mask))
 		return self.sublayer[2](x, self.feed_forward)
 
 def subsequent_mask(size):
@@ -203,7 +205,7 @@ class PositionwiseFeedForward(nn.Module):
 		return self.l_2(x)
 
 class Embeddings(nn.Module):
-	def __init__(self, d_model, vocab):
+	def __init__(self, d_model, vocab): # int, int
 		super(Embeddings, self).__init__()
 		self.lut = nn.Embedding(vocab, d_model)# lookup table
 		self.d_model = d_model
@@ -225,7 +227,7 @@ class PositionalEncoding(nn.Module):
 		pe[:, 0::2] = torch.sin(position * div_term)
 		pe[:, 1::2] = torch.cos(position * div_term)
 		pe = pe.unsqueeze(0)
-		self.register_buffer('pe', pe)
+		self.register_buffer('pe', pe) # no update during training
 	
 	def forward(self, x):
 		x = x + Variable(self.pe[:, :x.size(1)],
