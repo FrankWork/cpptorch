@@ -44,7 +44,9 @@ LogisticRegression::LogisticRegression(float learning_rate):
 
 template<class T>
 void LogisticRegression::fit(const Matrix<T>& features, 
-    const std::vector<int>&labels, int num_epochs){
+    const std::vector<int>&labels, int num_epochs,
+    const Matrix<T>& test_features, 
+    const std::vector<int>&test_labels){
 	std::unordered_set<int> labels_set(labels.begin(), labels.end());
     n_labels = labels_set.size();
 
@@ -65,6 +67,7 @@ void LogisticRegression::fit(const Matrix<T>& features,
 		Matrix<T> hidden = features.MatMul(this->weight) + this->bias;
 		Matrix<T> logits = sigmoid(hidden);
 		//std::cout << "hidden shape" << hidden.Shape() << "\n";
+        /*
 		std::cout << "hidden: ";
 		for(int j=0; j< 10;++j) {
 			std::cout << hidden.get(j, 0) << " ";
@@ -78,12 +81,19 @@ void LogisticRegression::fit(const Matrix<T>& features,
 		}
 		std::cout << "\n";
 		//std::cout << logits.Shape() << "\n";
-
+*/
 
 
 		T loss = nll_loss(logits, labels);
 		backward(features, logits, labels);
-		std::cout << "epoch: " << i <<  " loss: " << loss << "\n";
+	    float acc = accuracy(logits, labels);
+	    //std::cout << "acc: " << acc << "\n";
+		std::cout << "epoch: " << i <<  " loss: " << loss <<  " acc: " << acc
+        << "\n";
+        Matrix<T> test_logits = predict_proba(test_features);
+        float test_acc = accuracy(test_logits, test_labels);
+	    std::cout << "test_acc: " << test_acc << "\n";
+
 	}
 }
 
@@ -172,7 +182,7 @@ template<class T>
 float LogisticRegression::accuracy(const Matrix<T>& logits, const
 	std::vector<int>& labels, float threshold) {
 	float n_correct = 0;
-	std::cout << logits.Shape() << "\n";
+	//std::cout << logits.Shape() << "\n";
 	for(int i=0;i < labels.size(); ++i) {
 		if (logits.get(i,0) > threshold) {
 			n_correct += 1;
@@ -222,8 +232,8 @@ int main(int argc, char** argv) {
 	std::cout << "train: " << Xtrain.Rows() << ", " << Xtrain.Cols() << "\n";
 	std::cout << "test: " << Xtest.Rows() << ", " << Xtest.Cols() << "\n";
 
-	LogisticRegression clf(0.0001);
-	clf.fit(Xtrain, ytrain, 20);
+	LogisticRegression clf(0.001);
+	clf.fit(Xtrain, ytrain, 20, Xtest, ytest);
 	Matrix<float> logits = clf.predict_proba(Xtest);
 	float acc = clf.accuracy(logits, ytest);
 	std::cout << "acc: " << acc << "\n";

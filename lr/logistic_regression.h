@@ -117,7 +117,9 @@ public:
     LogisticRegression(float lr);
 
     template<class T>
-    void fit(const Matrix<T>& features, const std::vector<int>& labels, int num_epochs);
+    void fit(const Matrix<T>& features, const std::vector<int>& labels, int
+    num_epochs, const Matrix<T>& test_features, const std::vector<int>&
+    test_labels);
     
     template<class T>
     Matrix<T> predict(const Matrix<T>& features);
