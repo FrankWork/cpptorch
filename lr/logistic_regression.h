@@ -57,6 +57,14 @@ public:
 		data[i][j] = val;
 	}
 
+	void Zero() {
+		for(int i=0;i< _n_row; ++i) {
+			for(int j=0;j<_n_col;++j) {
+				data[i][j] = 0.;
+			}
+		}
+	}
+
     void Initialize(size_t n_row, size_t n_col) {
         _n_row = n_row;
         _n_col = n_col;
@@ -85,12 +93,34 @@ public:
         }
         return result;
     }
+	
+	std::vector<T> MatMul(const std::vector<T>& b) const {
+		std::vector<T> result(_n_row);
+        for(int i=0;i < _n_row; ++i){
+           result[i] = 0;
+           for(int k=0;k < _n_col; ++k) {
+           		result[i] += (data[i][k] * b[k]);
+           }
+        }
+        return result;
+    }
+
     size_t Rows() const{return _n_row;}
     size_t Cols() const {return _n_col;}
 	std::string Shape() const {
 		std::string tmp;
 		tmp += ( "(" +std::to_string(_n_row) +  ", " + std::to_string(_n_col) + ")");
 		return tmp;
+	}
+
+	T l2_norm() const {
+		T res=0;
+		for(int i=0;i < _n_row; ++i) {
+			for(int j=0;j < _n_col;++j) {
+				res += data[i][j];
+			}
+		}
+		return res;
 	}
 
     void Show() {
@@ -102,7 +132,12 @@ public:
         }
     }
 
-    ~Matrix(){}
+    ~Matrix(){
+		for(int i=0;i < _n_row; ++i) {
+			data[i].clear();
+		}
+		data.clear();
+	}
 private:
     size_t _n_row;
     size_t _n_col;
@@ -122,22 +157,28 @@ public:
     test_labels);
     
     template<class T>
-    Matrix<T> predict(const Matrix<T>& features);
+   	std::vector<T> predict(const Matrix<T>& features);
     
     template<class T>
-    Matrix<T> predict_proba(const Matrix<T>& features);
+    std::vector<T> predict_proba(const Matrix<T>& features);
     
 	template<class T>
-	void backward(const Matrix<T>&features, const Matrix<T>& logits, const std::vector<int>& labels);
+	void backward(const Matrix<T>&features, const std::vector<T>& logits, const std::vector<int>& labels);
 
     template<class T>
-    float accuracy(const Matrix<T>& logits, const std::vector<int>& labels, float threshold=0.5);
+    float accuracy(const std::vector<T>& logits, const std::vector<int>& labels, float threshold=0.5);
 
     template<class T>
-    float nll_loss(const Matrix<T>& logits, const std::vector<int>& labels);
+    float nll_loss(const std::vector<T>& logits, const std::vector<int>& labels);
 
 	template<class T>
-	Matrix<T> sigmoid(const Matrix<T>& hidden);
+	std::vector<T> sigmoid(const std::vector<T>& hidden);
+
+	template<class T>
+	T l2_norm(const std::vector<T>& vec);
+
+	template<class T>
+	void Zero( std::vector<T>& vec);
 
 	template<class T>
 	T sigmoid(const T& x);
@@ -149,8 +190,9 @@ public:
 
 private:
     float learning_rate;
-    Matrix<float> weight;
+	std::vector<float> weight;
     float bias;
+	float lambda;
     std::vector<float> _t_sigmoid;
     std::vector<float> _t_log;
     int n_labels;

@@ -28,7 +28,7 @@ constexpr int64_t MAX_SIGMOID = 8;
 constexpr int64_t LOG_TABLE_SIZE = 512;
 
 LogisticRegression::LogisticRegression(float learning_rate): 
-	learning_rate(learning_rate), bias(0) {
+	learning_rate(learning_rate), bias(0), lambda(0.1) {
 	_t_sigmoid.reserve(SIGMOID_TABLE_SIZE + 1);
   	for (int i = 0; i < SIGMOID_TABLE_SIZE + 1; i++) {
     float x = float(i * 2 * MAX_SIGMOID) / SIGMOID_TABLE_SIZE - MAX_SIGMOID;
@@ -54,8 +54,16 @@ void LogisticRegression::fit(const Matrix<T>& features,
     size_t hidden_size = features.Cols();
 	std::cout << n_sample << " " << hidden_size << "\n";
 
-    weight.Initialize(hidden_size, 1);
+	//weight.Initialize(hidden_size, 1);
+	std::minstd_rand rng(0);
+  	std::uniform_real_distribution<> uniform(-1./hidden_size, 1./hidden_size);
+	weight.resize(hidden_size);
+	for(int j=0;j<hidden_size;++j){
+		weight[j] = uniform(rng);
+	}
+
     
+	T prev_loss = 100000;
 	for(int i=0;i < num_epochs; ++i) {
 	/*	std::cout << "weight: ";
 		for(int j=0;j<hidden_size;++j) {
@@ -64,8 +72,11 @@ void LogisticRegression::fit(const Matrix<T>& features,
 		std::cout << "\n";
 */
 
-		Matrix<T> hidden = features.MatMul(this->weight) + this->bias;
-		Matrix<T> logits = sigmoid(hidden);
+		std::vector<T> hidden = features.MatMul(this->weight);// + this->bias;
+		for(int i=0;i < hidden.size();++i){
+			hidden[i] += this->bias;
+		}
+		std::vector<T> logits = sigmoid(hidden);
 		//std::cout << "hidden shape" << hidden.Shape() << "\n";
         /*
 		std::cout << "hidden: ";
@@ -90,39 +101,61 @@ void LogisticRegression::fit(const Matrix<T>& features,
 	    //std::cout << "acc: " << acc << "\n";
 		std::cout << "epoch: " << i <<  " loss: " << loss <<  " acc: " << acc
         << "\n";
-        Matrix<T> test_logits = predict_proba(test_features);
+		std::vector<T> test_logits = predict_proba(test_features);
         float test_acc = accuracy(test_logits, test_labels);
 	    std::cout << "test_acc: " << test_acc << "\n";
+		if (prev_loss - loss < 1e-7) {
+			//break;
+		}
+		prev_loss = loss;
 
 	}
 }
 
 template<class T>
-Matrix<T> LogisticRegression::predict(const Matrix<T>& features){
-    Matrix<T> hidden = features.MatMul(weight) + bias;
+std::vector<T> LogisticRegression::predict(const Matrix<T>& features){
+		std::vector<T> hidden = features.MatMul(this->weight);// + this->bias;
+		for(int i=0;i < hidden.size();++i){
+			hidden[i] += this->bias;
+		}
+	
 	return hidden;
 }
 
 template<class T>
-Matrix<T> LogisticRegression::predict_proba(const Matrix<T>& features) {
-    Matrix<T> hidden = features.MatMul(weight) + bias;
-	Matrix<T> logits = sigmoid(hidden);
+std::vector<T> LogisticRegression::predict_proba(const Matrix<T>& features) {
+		std::vector<T> hidden = features.MatMul(this->weight);// + this->bias;
+		for(int i=0;i < hidden.size();++i){
+			hidden[i] += this->bias;
+		}
+		std::vector<T> logits = sigmoid(hidden);
 	return logits;
 }
 
 template<class T>
-void LogisticRegression::backward(const Matrix<T>&features, const Matrix<T>& logits, const std::vector<int>& labels) {
+void LogisticRegression::backward(const Matrix<T>&features, const std::vector<T>& logits, 
+		const std::vector<int>& labels) {
+	std::vector<T> grad_w(weight.size());
+	//grad_w.Zero();
+	Zero(grad_w);
+	T grad_b = 0;
+
 	for(int i=0;i < labels.size(); ++i) {
 		for(int j=0; j < features.Cols(); ++j) {
-			T grad = (logits.get(i,0) - labels[i])*features.get(i,j);
+			T grad = (logits[i] - labels[i])*features.get(i,j);
 			//std::cout << "grad: " << grad << "\n";
 			if (grad > 10) grad = 10;
 			if (grad < -10) grad = -10;
-			weight.set(0, j, weight.get(0, j)-learning_rate*grad);
+			grad_w[j] += grad;
 		}
-		T grad = (logits.get(i, 0) - labels[i]);
-		bias = bias-learning_rate*grad;
+		grad_b += (logits[i] - labels[i]);
 	}
+
+	for(int i=0;i < weight.size(); ++i) {
+			weight[i] -= learning_rate*(grad_w[i]+2*lambda*weight[i]);
+	}
+	bias = bias-learning_rate*(grad_b+2*lambda*bias);
+	
 }
 
 template<class T>
@@ -149,42 +182,61 @@ T LogisticRegression::log(const T& x) {
 
 
 template<class T>
-Matrix<T> LogisticRegression::sigmoid(const Matrix<T>& hidden){
-	Matrix<T> res(hidden.Rows(), hidden.Cols());
-	for(int i=0;i<hidden.Rows();++i) {
-		for(int j=0; j<hidden.Cols();++j){
-			res.set(i, j, sigmoid(hidden.get(i, j)));
-		}
+std::vector<T> LogisticRegression::sigmoid(const std::vector<T>& hidden){
+	std::vector<T> res(hidden.size());
+	
+	for(int i=0;i<hidden.size();++i) {
+		res[i] = sigmoid(hidden[i]);
 	}
 	return res;
 }
 
 template<class T>
-float LogisticRegression::nll_loss(const Matrix<T>& logits, const
+float LogisticRegression::nll_loss(const std::vector<T>& logits, const
 	std::vector<int>& labels) {
 	T loss_sum = 0;
 	//std::cout << "labels size: " << labels.size() << "\n";
 	for(int i=0;i < labels.size(); ++i) {
 		if(labels[i]) {
-			loss_sum -= log(logits.get(i, 0));
+			loss_sum -= log(logits[i]);
 			//std::cout << "loss: " <<  log(logits.get(i, 0)) << "\n";
 		} else {
-			loss_sum -= log(1-logits.get(i, 0));
+			loss_sum -= log(1-logits[i]);
 			//std::cout << "loss: " << log(1-logits.get(i, 0)) << "\n";
 		}
 	}
+	loss_sum += lambda * l2_norm(weight);
+	loss_sum += lambda * bias * bias;
 	return loss_sum / labels.size();
 }
 
 
+template<class T>
+T LogisticRegression::l2_norm(const std::vector<T>& vec) {
+	T res = 0;
+	for(int i=0;i < vec.size();++i) {
+		res += vec[i]*vec[i];
+	}
+	return res;
+}
 
 template<class T>
-float LogisticRegression::accuracy(const Matrix<T>& logits, const
+void LogisticRegression::Zero( std::vector<T>& vec) {
+	
+	for(int i=0;i < vec.size();++i) {
+		vec[i] = 0;
+	}
+	//return res;
+}
+
+
+template<class T>
+float LogisticRegression::accuracy(const std::vector<T>& logits, const
 	std::vector<int>& labels, float threshold) {
 	float n_correct = 0;
 	//std::cout << logits.Shape() << "\n";
 	for(int i=0;i < labels.size(); ++i) {
-		if (logits.get(i,0) > threshold) {
+		if (logits[i] > threshold) {
 			n_correct += 1;
 		}
 	}
@@ -231,10 +283,14 @@ int main(int argc, char** argv) {
 
 	std::cout << "train: " << Xtrain.Rows() << ", " << Xtrain.Cols() << "\n";
 	std::cout << "test: " << Xtest.Rows() << ", " << Xtest.Cols() << "\n";
-
-	LogisticRegression clf(0.001);
-	clf.fit(Xtrain, ytrain, 20, Xtest, ytest);
-	Matrix<float> logits = clf.predict_proba(Xtest);
+	float lr = 0.001;
+	if (argc >= 2) {
+		lr = std::stof(std::string(argv[1]));
+		std::cout << "lr :" << lr << "\n";
+	}
+	LogisticRegression clf(lr);
+	clf.fit(Xtrain, ytrain, 1000, Xtest, ytest);
+	std::vector<float> logits = clf.predict_proba(Xtest);
 	float acc = clf.accuracy(logits, ytest);
 	std::cout << "acc: " << acc << "\n";
 }
