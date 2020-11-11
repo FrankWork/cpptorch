@@ -28,6 +28,10 @@ public:
         }
         return res;
     }
+
+	std::vector<T>& operator[](int i) {
+		return data[i];
+	}
 	
 	Matrix<T> operator+(const T& bias) const {
         Matrix<T> res(_n_row, _n_col);
