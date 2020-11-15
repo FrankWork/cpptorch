@@ -19,13 +19,13 @@ clf = DecisionTreeClassifier(random_state=0).fit(X_train, Y_train)
 y_pred = clf.predict(X_test)
 accuracy_score(y_pred, Y_test) # 0.9777
 
-with open('train.txt', 'w') as f:
-    for x, y in zip(X_train, Y_train):
-        x = '\t'.join([str(i) for i in list(x)])
-        f.write('%d\t%s\n' % (y, x)
-        )  
-with open('test.txt', 'w') as f:
-    for x, y in zip(X_test, Y_test):
-        x = '\t'.join([str(i) for i in list(x)])
-        f.write('%d\t%s\n' % (y, x)
-        ) 
+#with open('train.txt', 'w') as f:
+#    for x, y in zip(X_train, Y_train):
+#        x = '\t'.join([str(i) for i in list(x)])
+#        f.write('%d\t%s\n' % (y, x)
+#        )  
+#with open('test.txt', 'w') as f:
+#    for x, y in zip(X_test, Y_test):
+#        x = '\t'.join([str(i) for i in list(x)])
+#        f.write('%d\t%s\n' % (y, x)
+#        ) 
