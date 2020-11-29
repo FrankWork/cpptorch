@@ -2,11 +2,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <algorithm>
+#include <fstream>
+#include <cmath>
 
-void Node::SetData(const Matrix& X, const std::vector<int>& y) {
-    x=X;
-    y=y;
-}
 
 void Node::ComputeLabelProb(const std::vector<int>& y, int num_label) {
 	label_prob.resize(num_label);
@@ -49,14 +47,14 @@ std::vector<float> Node::FeatureValues(const Matrix& x, int feat_idx) {
     return candidates;
 }
 
-float Node::FeatureSelection(const Matrix& x, const vector<int>& y) {
+float Node::FeatureSelection(const Matrix& x, const std::vector<int>& y) {
     float max_gain = -1;
     
     for(int i=0; i< NumFeatures(x); ++i) {
         std::vector<float> points = FeatureValues(x, i);
         for(int j=0; j< points.size();++j) {
             
-            float gain = ComputeGain(i, points[j]);
+            float gain = ComputeGain(x, y, i, points[j]);
             if (max_gain < gain) {
                 max_gain = gain;
                 best_idx = i;
@@ -79,7 +77,7 @@ float Node::ComputeGain(const Matrix& x, const std::vector<int>& y,
         }
     }
 	return part1.size()/y.size()*Gini(part1) + \
-		part2.size()/y.size()*Gini(part2)
+		part2.size()/y.size()*Gini(part2);
 
 }
 
@@ -89,9 +87,10 @@ float Node::Gini(std::vector<int>& labels) {
         freq[v] += 1;
     }
     float sum=0;
-    for(auto it& : freq) {
-        it->second /= labels.size();
-        sum += (it->second*it->second);
+
+    for(auto &it : freq) {
+        it.second /= labels.size();
+        sum += (it.second*it.second);
     }
     
     return 1-sum;
@@ -99,7 +98,7 @@ float Node::Gini(std::vector<int>& labels) {
 
 void Node::Split(const Matrix& x, const std::vector<int>& y,
 		Matrix& x1, std::vector<int>& y1,
-		Matrix& x2, std::vector<int>& y2,
+		Matrix& x2, std::vector<int>& y2
 		) {
 	for(int i=0;i<NumSamples(x); ++i){
 		if(x[i][best_idx] > threshold) {
@@ -121,7 +120,7 @@ DecisionTree::DecisionTree(int max_depth):
 
 void DecisionTree::Fit(const Matrix& X, const std::vector<int>& y) {
     //unordered_map<int> labels;
-    //int n_labels = max_element(y.begin(), y.end()) + 1;
+    n_labels = *max_element(y.begin(), y.end()) + 1;
 
     Grow(root, X, y, max_depth);    
 }
@@ -129,7 +128,7 @@ void DecisionTree::Fit(const Matrix& X, const std::vector<int>& y) {
 void DecisionTree::Grow(const std::shared_ptr<Node>& node,
 		const Matrix& X, const std::vector<int>& y, int depth) {
 	if (depth<0) return;
-	node->ComputeLabelProb(y);
+	node->ComputeLabelProb(y, n_labels);
 
     if(node->NumLabels() <= 1) {
        return;
@@ -146,23 +145,36 @@ void DecisionTree::Grow(const std::shared_ptr<Node>& node,
 	std::vector<int> y1,y2;
     node->Split(X, y, x1, y1, x2, y2);
     Grow(node->left, x1, y1, depth-1);
-    Grow(node->right, X2, y2, depth-1);
+    Grow(node->right, x2, y2, depth-1);
 }
 
-std::vector<float> DecisionTree::predict(const Matrix& X) {
+Matrix DecisionTree::predict_proba(const Matrix& X) {
 	std::vector<float> preds;
+    Matrix all_preds;
 	for(int i=0;i < X.NumRows(); ++i) {
-		
+		preds = predict(root, X[i]);
+        all_preds.push_back(preds);
 	}
+    return all_preds;
+}
+
+std::vector<int> DecisionTree::predict(const Matrix&X) {
+    Matrix y_prob = predict_proba(X);
+    std::vector<int> y_pred;
+    for(int i=0;i < y_prob.NumRows(); ++i) {
+        auto max_p = std::max_element(y_prob[i].begin(), y_prob[i].end());
+        int label = std::distance(y_prob[i].begin(), max_p);
+        y_pred.push_back(label);
+    };
+    return y_pred;
 }
 
 std::vector<float> DecisionTree::predict(std::shared_ptr<Node> node, 
-		const std::vector<float> x) {
+		const std::vector<float>& x) {
 	std::vector<float> pred;
 	if (node->left == nullptr and node->right == nullptr) {
 		return node->label_prob;
 	}
-
 
 	if(x[node->best_idx] > node->threshold) {
 		return predict(node->left, x);
@@ -170,5 +182,67 @@ std::vector<float> DecisionTree::predict(std::shared_ptr<Node> node,
 		return predict(node->right, x);
 	}
 }
+float DecisionTree::accuracy(const std::vector<int>&y_pred, const std::vector<int>& y_true) {
+    float tp = 0;
+    for(int i=0; i< y_pred.size();++i) {
+        if(y_pred[i] == y_true[i]) {
+            ++tp;
+        }
+    }
+    return tp / y_pred.size();
+}
 
+void load_data(const std::string& filename, Matrix& features, std::vector<int>& labels) {
+	std::ifstream ifs(filename);
+	std::string line;
+	std::string word;
+	std::vector<std::string> parts;
+	while(getline(ifs, line)) {
+		int size = line.length();
+		for(int i=0;i < size;++i) {
+			if(line[i] != '\t') {
+				word.push_back(line[i]);
+			} else {
+				parts.push_back(word);
+				word.clear();
+			}
+		}
+		if (!word.empty()) {
+			parts.push_back(word);
+			word.clear();
+		}
+		labels.push_back(std::stoi(parts[0]));
+		std::vector<float> feat(parts.size()-1);
+		for(int i=1;i < parts.size(); ++i) {
+			feat[i-1] = std::stof(parts[i]);
+		}
+		features.push_back(feat);
+		parts.clear();
+	};
+}
+
+
+int main(int argc, char** argv) {
+    //test_matmul();
+	Matrix Xtrain, Xtest;
+	std::vector<int> ytrain, ytest;
+	
+	load_data("train.txt", Xtrain, ytrain);
+	load_data("test.txt", Xtest, ytest);
+
+	std::cout << "train: " << Xtrain.NumRows() << ", " << Xtrain.NumCols() << "\n";
+	std::cout << "test: " << Xtest.NumRows() << ", " << Xtest.NumCols() << "\n";
+	float lr = 0.1;
+	if (argc >= 2) {
+		lr = std::stof(std::string(argv[1]));
+		std::cout << "lr :" << lr << "\n";
+	}
+	DecisionTree clf(10);
+	///clf.fit(Xtrain, ytrain, 2000, Xtest, ytest);
+	clf.Fit(Xtrain, ytrain);
+	std::vector<int> y_pred = clf.predict(Xtest);
+	float acc = clf.accuracy(y_pred, ytest);
+	std::cout << "acc: " << acc << "\n";
+
+}
 
