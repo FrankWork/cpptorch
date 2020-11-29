@@ -16,6 +16,7 @@ private:
 class Node {
 public:
     Node() {}
+	Node(const Matrix& x, const std::vector<int>& y):x(x), y(y){}
     void SetData(const Matrix& X, const std::vector<int>& y);
     int NumLabels();
     int NumFeatures();
@@ -25,20 +26,24 @@ public:
 private:
     Matrix x;
     std::vector<int> y;
-    std::unordered_map<int, float> label_prob;
+	std::vector<float> label_prob;
     std::shared_ptr<Node> left;
     std::shared_ptr<Node> right;
+	int best_idx;
+	float threshold;
 };
 
 class DecisionTree {
 
 public:
     void Fit(const Matrix& X, const std::vector<float>& y);
-    void Grow(const unique_ptr<Node>& root);
+    void Grow(const std::shared_ptr<Node>& root, const Matrix& X, const std::vector<float>& y);
     std::vector<float> predict(const Matrix& X);
     ~DecisionTree(){}
 
 private:
-    unique_ptr<Node> root;
+	std::shared_ptr<Node> root;
+	int max_depth;
+	float epsilon;
 };
 
