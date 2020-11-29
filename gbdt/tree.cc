@@ -198,6 +198,7 @@ void load_data(const std::string& filename, Matrix& features, std::vector<int>& 
 	std::string word;
 	std::vector<std::string> parts;
 	while(getline(ifs, line)) {
+        //std::cout << line << "\n";
 		int size = line.length();
 		for(int i=0;i < size;++i) {
 			if(line[i] != '\t') {
@@ -211,6 +212,7 @@ void load_data(const std::string& filename, Matrix& features, std::vector<int>& 
 			parts.push_back(word);
 			word.clear();
 		}
+        //std::cout << parts.size() <<"\n";
 		labels.push_back(std::stoi(parts[0]));
 		std::vector<float> feat(parts.size()-1);
 		for(int i=1;i < parts.size(); ++i) {
@@ -243,6 +245,5 @@ int main(int argc, char** argv) {
 	std::vector<int> y_pred = clf.predict(Xtest);
 	float acc = clf.accuracy(y_pred, ytest);
 	std::cout << "acc: " << acc << "\n";
-
 }
 

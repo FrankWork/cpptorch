@@ -13,6 +13,7 @@ public:
     std::vector<float> operator[](int i) const {return data[i];};
     std::vector<float> operator[](int i)  {return data[i];};
     void push_back(const std::vector<float> x) {
+        if (_n_cols == 0) _n_cols = x.size();
         data.push_back(x);
         ++_n_rows;
     };
