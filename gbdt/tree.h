@@ -11,7 +11,7 @@ public:
     int NumRows() const {return _n_rows;}
     int NumCols() const {return _n_cols;}
     std::vector<float> operator[](int i) const {return data[i];};
-    std::vector<float> operator[](int i)  {return data[i];};
+    std::vector<float>& operator[](int i)  {return data[i];};
     void push_back(const std::vector<float> x) {
         if (_n_cols == 0) _n_cols = x.size();
         data.push_back(x);
@@ -55,6 +55,7 @@ private:
 class DecisionTree {
 
 public:
+    DecisionTree(){DecisionTree(0);}
     DecisionTree(int max_depth);
     void Fit(const Matrix& X, const std::vector<int>& y);
     void Grow(const std::shared_ptr<Node>& root, const Matrix& X, const

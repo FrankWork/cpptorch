@@ -115,27 +115,43 @@ void Node::Split(const Matrix& x, const std::vector<int>& y,
 
 DecisionTree::DecisionTree(int max_depth):
 	epsilon(1e-5), max_depth(max_depth){
-    root = std::make_shared<Node>();
+    //root = std::make_shared<Node>();
 }
 
 void DecisionTree::Fit(const Matrix& X, const std::vector<int>& y) {
     //unordered_map<int> labels;
-    n_labels = *max_element(y.begin(), y.end()) + 1;
+	if (y.empty()) {
+		std::cerr << "label vector is empty\n";
+		return;
+	}
+	std::cerr  << "ytrain: " << y.size() << "\n";
+	auto it = max_element(y.cbegin(), y.cend());
+	//std::cerr << *it << "\n";
+    n_labels = *it + 1;
 
-    Grow(root, X, y, max_depth);    
+	std::cerr << "n_labels: " << n_labels << "\n";
+	if (root == nullptr){
+		root = std::make_shared<Node>();
+	}
+    Grow(root, X, y, 0);
 }
 
 void DecisionTree::Grow(const std::shared_ptr<Node>& node,
 		const Matrix& X, const std::vector<int>& y, int depth) {
-	if (depth<0) return;
+	if (node == nullptr) return;
 	node->ComputeLabelProb(y, n_labels);
-
+	//std::cout << "tree depth: " << depth << "\n";
+	
+	if(max_depth>0 && depth > max_depth){
+		return;
+	}
     if(node->NumLabels() <= 1) {
        return;
     }
     if(node->NumFeatures(X) == 1) {
         return;
     }
+	
     float max_gain = node->FeatureSelection(X, y);
     if(max_gain < epsilon) {
         return;
@@ -144,11 +160,14 @@ void DecisionTree::Grow(const std::shared_ptr<Node>& node,
 	Matrix x1, x2;
 	std::vector<int> y1,y2;
     node->Split(X, y, x1, y1, x2, y2);
-    Grow(node->left, x1, y1, depth-1);
-    Grow(node->right, x2, y2, depth-1);
+    Grow(node->left, x1, y1, depth+1);
+    Grow(node->right, x2, y2, depth+1);
 }
 
 Matrix DecisionTree::predict_proba(const Matrix& X) {
+	if (root == nullptr) {
+		std::cerr << "tree root is nullptr" << "\n";
+	}
 	std::vector<float> preds;
     Matrix all_preds;
 	for(int i=0;i < X.NumRows(); ++i) {
@@ -162,8 +181,13 @@ std::vector<int> DecisionTree::predict(const Matrix&X) {
     Matrix y_prob = predict_proba(X);
     std::vector<int> y_pred;
     for(int i=0;i < y_prob.NumRows(); ++i) {
+		//std::cerr << "i: " << i << " size: " << y_prob[i].size() << "\n";
+        //auto max_p = std::max_element(y_prob[i].cbegin(), y_prob[i].cend());
         auto max_p = std::max_element(y_prob[i].begin(), y_prob[i].end());
+		//std::cerr << "max_p: " << *max_p << "\n";
+        //int label = std::distance(y_prob[i].cbegin(), max_p);
         int label = std::distance(y_prob[i].begin(), max_p);
+		//std::cerr << "label: " << label << "\n";
         y_pred.push_back(label);
     };
     return y_pred;
@@ -177,10 +201,17 @@ std::vector<float> DecisionTree::predict(std::shared_ptr<Node> node,
 	}
 
 	if(x[node->best_idx] > node->threshold) {
-		return predict(node->left, x);
+		if (node->left != nullptr) {
+			return predict(node->left, x);
+		}
+		
 	} else {
-		return predict(node->right, x);
+		if (node->right != nullptr){
+			return predict(node->right, x);
+		}
+		
 	}
+	return node->label_prob;
 }
 float DecisionTree::accuracy(const std::vector<int>&y_pred, const std::vector<int>& y_true) {
     float tp = 0;
@@ -234,12 +265,14 @@ int main(int argc, char** argv) {
 
 	std::cout << "train: " << Xtrain.NumRows() << ", " << Xtrain.NumCols() << "\n";
 	std::cout << "test: " << Xtest.NumRows() << ", " << Xtest.NumCols() << "\n";
+	std::cout << "train: " << ytrain.size()  << "\n";
+	std::cout << "test: " << ytest.size() <<  "\n";
 	float lr = 0.1;
 	if (argc >= 2) {
 		lr = std::stof(std::string(argv[1]));
 		std::cout << "lr :" << lr << "\n";
 	}
-	DecisionTree clf(10);
+	DecisionTree clf;
 	///clf.fit(Xtrain, ytrain, 2000, Xtest, ytest);
 	clf.Fit(Xtrain, ytrain);
 	std::vector<int> y_pred = clf.predict(Xtest);
