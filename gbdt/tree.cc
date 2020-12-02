@@ -49,14 +49,15 @@ std::vector<float> Node::FeatureValues(const Matrix& x, int feat_idx) {
     return candidates;
 }
 
-float Node::FeatureSelection(const Matrix& x, const std::vector<int>& y) {
+// TODO: move it to DecisionTree
+float Node::FeatureSelection(const Matrix& x, const std::vector<int>& y, const std::string& criterion) {
     float max_gain = -1;
     
     for(int i=0; i< NumFeatures(x); ++i) {
         std::vector<float> points = FeatureValues(x, i);
         for(int j=0; j< points.size();++j) {
             
-            float gain = ComputeGain(x, y, i, points[j]);
+            float gain = ComputeGain(x, y, i, points[j], criterion);
             if (max_gain < gain) {
                 max_gain = gain;
                 best_idx = i;
@@ -73,11 +74,10 @@ float Node::FeatureSelection(const Matrix& x, const std::vector<int>& y) {
 }
 
 float Node::ComputeGain(const Matrix& x, const std::vector<int>& y, 
-		int feat_idx, float threshold) {
+		int feat_idx, float threshold, const std::string& criterion) {
 	//child loss only		
 	// todo: impurity gain
 	// CART: minimize Gini(D, A), is equal to maxmize Gini(D) - Gini(D, A)
-    float parent_loss = Gini(y);
 	std::vector<int> part1, part2;       
     for(int i=0;i<x.NumRows();++i) {
         if(x[i][feat_idx] <= threshold) {
@@ -88,15 +88,29 @@ float Node::ComputeGain(const Matrix& x, const std::vector<int>& y,
     }
 	float p1 = part1.size() / float(y.size());
 	float p2 = part2.size() / float(y.size());
-	float child_loss = p1*Gini(part1) + p2*Gini(part2);
+	if (criterion == "gini") {
+		float parent_loss = Gini(y);
+		float child_loss = p1*Gini(part1) + p2*Gini(part2);
+		return parent_loss - child_loss;
+	}
+	float parent_loss = Entropy(y);
+	float child_loss = p1*Entropy(part1) + p2*Entropy(part2);
 	return parent_loss - child_loss;
-	//return child_loss;
-	//if (parent_loss > 0)
-	//std::cerr << "parent_loss: " << parent_loss << "\n";
-	//if (child_loss > 0)
-	//std::cerr << "child_loss: " << child_loss << "\n";
-	//return 0;
+}
 
+float Node::Entropy(const std::vector<int>& labels) {
+    std::unordered_map<int, float> freq;
+    for(int v : labels) {
+        freq[v] += 1;
+    }
+    float sum=0;
+
+    for(auto &it : freq) {
+        it.second /= labels.size();
+        sum += (it.second*std::log2(it.second+1e-5));
+    }
+    
+    return 1-sum;
 }
 
 float Node::Gini(const std::vector<int>& labels) {
@@ -127,13 +141,9 @@ void Node::Split(const Matrix& x, const std::vector<int>& y,
 			y2.push_back(y[i]);
 		}
 	}
+	// TODO: move it to DecisionTree::Grow
 	left = std::make_shared<Node>();
 	right = std::make_shared<Node>();
-}
-
-DecisionTree::DecisionTree(int max_depth):
-	epsilon(1e-5), max_depth(max_depth){
-    //root = std::make_shared<Node>();
 }
 
 void DecisionTree::Fit(const Matrix& X, const std::vector<int>& y) {
@@ -170,7 +180,7 @@ void DecisionTree::Grow(const std::shared_ptr<Node>& node,
         return;
     }
 	
-    float max_gain = node->FeatureSelection(X, y);
+    float max_gain = node->FeatureSelection(X, y, criterion);
 	
     if(max_gain < epsilon) {
 		//std::cerr << "gain < epsilon" << "\n";
@@ -292,7 +302,8 @@ int main(int argc, char** argv) {
 		lr = std::stof(std::string(argv[1]));
 		std::cout << "lr :" << lr << "\n";
 	}
-	DecisionTree clf; // max_depth is no limit
+	//DecisionTree clf("entropy"); // max_depth is no limit, 0.9778
+	DecisionTree clf("gini"); // max_depth is no limit, 0.9778
 	///clf.fit(Xtrain, ytrain, 2000, Xtest, ytest);
 	clf.Fit(Xtrain, ytrain);
 	std::vector<int> y_pred = clf.predict(Xtest);

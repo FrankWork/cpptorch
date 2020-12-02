@@ -31,11 +31,12 @@ public:
     int NumFeatures(const Matrix&x);
     int NumSamples(const Matrix&x);
     std::vector<float> FeatureValues(const Matrix&x, int feat_idx);
-    float FeatureSelection(const Matrix&x, const std::vector<int>&y);
+    float FeatureSelection(const Matrix&x, const std::vector<int>&y, const std::string& criterion);
     void ComputeLabelProb(const std::vector<int>&y, int num_label);
     float ComputeGain(const Matrix& x, const std::vector<int>&y, 
-        int i, float threshold);
+        int i, float threshold, const std::string& criterion);
     float Gini(const std::vector<int>& labels);
+    float Entropy(const std::vector<int>& labels);
     void Split(const Matrix& x, const std::vector<int>& y,
 		Matrix& x1, std::vector<int>& y1,
 		Matrix& x2, std::vector<int>& y2);
@@ -56,7 +57,9 @@ class DecisionTree {
 
 public:
     DecisionTree(){DecisionTree(0);}
-    DecisionTree(int max_depth);
+    DecisionTree(const std::string& criterion):epsilon(1e-5), criterion(criterion), max_depth(0){}
+    DecisionTree(int max_depth):epsilon(1e-5), max_depth(max_depth),criterion("entropy") {}
+
     void Fit(const Matrix& X, const std::vector<int>& y);
     void Grow(const std::shared_ptr<Node>& root, const Matrix& X, const
     std::vector<int>& y, int depth);
@@ -70,6 +73,7 @@ public:
 
 private:
 	std::shared_ptr<Node> root;
+    std::string criterion;
 	int max_depth;
     int n_labels;
 	float epsilon;
