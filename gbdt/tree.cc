@@ -7,6 +7,7 @@
 
 
 void Node::ComputeLabelProb(const std::vector<int>& y, int num_label) {
+	// bincount
 	label_prob.resize(num_label);
 	for(int i=0;i < num_label; ++i) {
 		label_prob[i] = 0;
@@ -39,8 +40,9 @@ std::vector<float> Node::FeatureValues(const Matrix& x, int feat_idx) {
     std::vector<float> values(value_set.begin(), value_set.end());
     std::sort(values.begin(), values.end());
 
+	// candidate split point
     std::vector<float> candidates;
-    for(int i=0;i < values.size()-1; ++i){
+    for(int i=0;i < values.size()-1; ++i){		
         float t = (values[i] + values[i+1]) / 2;
         candidates.push_back(t);
     }
@@ -62,26 +64,42 @@ float Node::FeatureSelection(const Matrix& x, const std::vector<int>& y) {
             }
         }
     }
+	std::cerr << "max_gain: " << max_gain 
+			<< " best_idx: " << best_idx
+			<< " threshold: " << threshold
+			<< "\n";
+
 	return max_gain;
 }
 
 float Node::ComputeGain(const Matrix& x, const std::vector<int>& y, 
 		int feat_idx, float threshold) {
-    float entropy_d = 0;
+	//child loss only		
+	// todo: impurity gain
+	// CART: minimize Gini(D, A), is equal to maxmize Gini(D) - Gini(D, A)
+    float parent_loss = Gini(y);
 	std::vector<int> part1, part2;       
     for(int i=0;i<x.NumRows();++i) {
-        if(x[i][feat_idx] > threshold) {
+        if(x[i][feat_idx] <= threshold) {
         	part1.push_back(y[i]);
         } else {
         	part2.push_back(y[i]);
         }
     }
-	return part1.size()/y.size()*Gini(part1) + \
-		part2.size()/y.size()*Gini(part2);
+	float p1 = part1.size() / float(y.size());
+	float p2 = part2.size() / float(y.size());
+	float child_loss = p1*Gini(part1) + p2*Gini(part2);
+	return parent_loss - child_loss;
+	//return child_loss;
+	//if (parent_loss > 0)
+	//std::cerr << "parent_loss: " << parent_loss << "\n";
+	//if (child_loss > 0)
+	//std::cerr << "child_loss: " << child_loss << "\n";
+	//return 0;
 
 }
 
-float Node::Gini(std::vector<int>& labels) {
+float Node::Gini(const std::vector<int>& labels) {
     std::unordered_map<int, float> freq;
     for(int v : labels) {
         freq[v] += 1;
@@ -101,7 +119,7 @@ void Node::Split(const Matrix& x, const std::vector<int>& y,
 		Matrix& x2, std::vector<int>& y2
 		) {
 	for(int i=0;i<NumSamples(x); ++i){
-		if(x[i][best_idx] > threshold) {
+		if(x[i][best_idx] <= threshold) {
 			x1.push_back(x[i]);
 			y1.push_back(y[i]);
 		} else {
@@ -153,7 +171,9 @@ void DecisionTree::Grow(const std::shared_ptr<Node>& node,
     }
 	
     float max_gain = node->FeatureSelection(X, y);
+	
     if(max_gain < epsilon) {
+		//std::cerr << "gain < epsilon" << "\n";
         return;
     }
 
@@ -200,16 +220,16 @@ std::vector<float> DecisionTree::predict(std::shared_ptr<Node> node,
 		return node->label_prob;
 	}
 
-	if(x[node->best_idx] > node->threshold) {
-		if (node->left != nullptr) {
-			return predict(node->left, x);
+	if(node->best_idx != -1) {
+		if(x[node->best_idx] <= node->threshold) {
+			if (node->left != nullptr) {
+				return predict(node->left, x);
+			}
+		} else {
+			if (node->right != nullptr){
+				return predict(node->right, x);
+			}
 		}
-		
-	} else {
-		if (node->right != nullptr){
-			return predict(node->right, x);
-		}
-		
 	}
 	return node->label_prob;
 }
@@ -272,11 +292,11 @@ int main(int argc, char** argv) {
 		lr = std::stof(std::string(argv[1]));
 		std::cout << "lr :" << lr << "\n";
 	}
-	DecisionTree clf;
+	DecisionTree clf; // max_depth is no limit
 	///clf.fit(Xtrain, ytrain, 2000, Xtest, ytest);
 	clf.Fit(Xtrain, ytrain);
 	std::vector<int> y_pred = clf.predict(Xtest);
 	float acc = clf.accuracy(y_pred, ytest);
-	std::cout << "acc: " << acc << "\n";
+	std::cout << "acc: " << acc << "\n"; // 0.9778
 }
 

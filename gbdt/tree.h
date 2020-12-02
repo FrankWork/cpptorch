@@ -25,7 +25,7 @@ private:
 
 class Node {
 public:
-    Node() {}
+    Node() : left(nullptr), right(nullptr), best_idx(-1), threshold(-1){}
 	//Node(const Matrix& x, const std::vector<int>& y):x(x), y(y){}
     int NumLabels();
     int NumFeatures(const Matrix&x);
@@ -35,7 +35,7 @@ public:
     void ComputeLabelProb(const std::vector<int>&y, int num_label);
     float ComputeGain(const Matrix& x, const std::vector<int>&y, 
         int i, float threshold);
-    float Gini(std::vector<int>& labels);
+    float Gini(const std::vector<int>& labels);
     void Split(const Matrix& x, const std::vector<int>& y,
 		Matrix& x1, std::vector<int>& y1,
 		Matrix& x2, std::vector<int>& y2);
