@@ -9,16 +9,19 @@
 class Loss {
 public:
 	virtual float base_estimator(const std::vector<float>& y);
+	virtual float grad(const std::vector<float>&y_true, const std::vector<float>& y_pred);
 };
 
 class MSELoss : public Loss {
 public:
 	float base_estimator(const std::vector<float>& y);
+	float grad(const std::vector<float>&y_true, const std::vector<float>& y_pred);
 };
 
 class CrossEntropyLoss : public Loss {
 public:
 	float base_estimator(const std::vector<float>& y);
+	float grad(const std::vector<float>&y_true, const std::vector<float>& y_pred);
 };
 
 class GradientBoostingDT {

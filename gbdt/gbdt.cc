@@ -24,6 +24,19 @@ float MSELoss::base_estimator(const std::vector<float>& y){
     return ans / y.size();
 }
 
+float CrossEntropyLoss::base_estimator(const std::vector<float>& y){
+    float ans = std::accumulate(y.begin(), y.end(), 0);
+    return ans / y.size();
+}
+
+float MSELoss::grad(const std::vector<float>&y_true, const std::vector<float>& y_pred) {
+
+}
+
+float CrossEntropyLoss::grad(const std::vector<float>&y_true, const std::vector<float>& y_pred) {
+    
+}
+
 GradientBoostingDT::GradientBoostingDT(int n_trees, int max_depth, bool regression): 
 		n_trees(n_trees), max_depth(max_depth), regression(regression){
     if(regression) {
@@ -50,8 +63,10 @@ void GradientBoostingDT::Fit(const Matrix& X, const std::vector<float>& yvec) {
     for(int i=1; i < n_trees; ++i){
         for(int j=0; j < n_out; ++j){
             std::vector<float> y_j = Y.slice_by_column(j);
+            std::vector<float> grad = loss->grad();
+
             DecisionTree tree("mse", max_depth);
-            tree.Fit(X, y_j);
+            tree.Fit(X, grad);
             std::vector<float> pred_j = tree.predict(X);
             preds.set_column(pred_j, j);
         }
