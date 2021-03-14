@@ -19,6 +19,22 @@ Matrix onehot(const std::vector<float>& yvec, int n_out){
     return Y;
 }
 
+void BaseClassifier::Fit(const std::vector<float>& y) {
+		// count label frequency
+		for(int i = 0;i < y.size(); ++i){
+			int label = y[i];
+			prob[label] += 1;
+		}
+		for(int i = 0; i < prob.size(); ++i){
+			prob[i] /= y.size();
+		}
+}
+
+void BaseRegressor::Fit(const std::vector<float>& y){
+		mean = std::accumulate(y.begin(), y.end(), 0);
+		mean /= y.size();
+}
+
 float MSELoss::base_estimator(const std::vector<float>& y){
     float ans = std::accumulate(y.begin(), y.end(), 0);
     return ans / y.size();
@@ -29,12 +45,19 @@ float CrossEntropyLoss::base_estimator(const std::vector<float>& y){
     return ans / y.size();
 }
 
-float MSELoss::grad(const std::vector<float>&y_true, const std::vector<float>& y_pred) {
-
+std::vector<float> MSELoss::grad(const std::vector<float>&y_true, const std::vector<float>& y_pred) {
+    // grad = \frac{1}{n}\sum_i(y_i-\hat{y_i}) 
+    int n = y_true.size();
+    std::vector<float> res(n, 0);
+    for(int i=0;i < n; ++i){
+        res[i] = (y_true[i] - y_pred[i]) / n;
+    }
+    return res;
 }
 
-float CrossEntropyLoss::grad(const std::vector<float>&y_true, const std::vector<float>& y_pred) {
-    
+std::vector<float> CrossEntropyLoss::grad(const std::vector<float>&y_true, const std::vector<float>& y_pred) {
+    int n = y_true.size();
+
 }
 
 GradientBoostingDT::GradientBoostingDT(int n_trees, int max_depth, bool regression): 
@@ -65,7 +88,7 @@ void GradientBoostingDT::Fit(const Matrix& X, const std::vector<float>& yvec) {
             std::vector<float> y_j = Y.slice_by_column(j);
             std::vector<float> grad = loss->grad();
 
-            DecisionTree tree("mse", max_depth);
+            DecisionTree tree("mse",  max_depth);
             tree.Fit(X, grad);
             std::vector<float> pred_j = tree.predict(X);
             preds.set_column(pred_j, j);
