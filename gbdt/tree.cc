@@ -205,7 +205,7 @@ void DecisionTree::Fit(const Matrix& X, const std::vector<float>& y) {
 	std::cerr  << "ytrain: " << y.size() << "\n";
 
 	if (criterion != "mse") {
-		auto it = max_element(y.cbegin(), y.cend());
+		auto it = std::max_element(y.cbegin(), y.cend());
 		n_labels = *it + 1;
 		std::cerr << "n_labels: " << n_labels << "\n";
 	}
@@ -378,9 +378,9 @@ void test_regressor() {
 	float error = clf.MeanSquaredError(y_pred, ytest);
 	std::cout << "error: " << error << "\n"; // 33.7251 vs 32.41637254901961
 }
-
+/*
 int main(int argc, char** argv) {
 	//test_classifier();
 	test_regressor();
-}
+}*/
 

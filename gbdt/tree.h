@@ -90,3 +90,4 @@ private:
 	float epsilon;
 };
 
+void load_data(const std::string& filename, Matrix& features, std::vector<float>& labels);
